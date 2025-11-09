@@ -15,6 +15,9 @@ import SettingsDrawer from './SettingsDrawer';
 import HighlightMenu from './HighlightMenu';
 import NoteEditor from './NoteEditor';
 import ProgressIndicators from './ProgressIndicators';
+import AiRecap from './AiRecap';
+import AiExplanation from './AiExplanation';
+import AiChapterSummary from './AiChapterSummary';
 
 // Dynamically import to avoid SSR issues with epub.js
 const ReaderViewContent = dynamic(() => Promise.resolve(ReaderViewContentComponent), {
@@ -31,6 +34,10 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
   const containerRef = useRef<HTMLDivElement>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showNoteEditor, setShowNoteEditor] = useState(false);
+  const [showAiRecap, setShowAiRecap] = useState(false);
+  const [showAiExplanation, setShowAiExplanation] = useState(false);
+  const [showAiChapterSummary, setShowAiChapterSummary] = useState(false);
+  const [aiExplanationData, setAiExplanationData] = useState<{ text: string; position: { x: number; y: number } } | null>(null);
   const { showControls, toggleControls, setShowControls } = useSettingsStore();
 
   const { book, rendition, loading, currentLocation, progress, totalLocations, nextPage, prevPage, goToLocation } =
@@ -100,6 +107,44 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
     return () => clearTimeout(timeout);
   }, [showControls, setShowControls]);
 
+  // Show controls on mouse movement near top of screen (desktop UX)
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      // Show controls when mouse moves to top 15% of screen
+      const topThreshold = window.innerHeight * 0.15;
+      if (e.clientY < topThreshold && !showControls) {
+        setShowControls(true);
+      }
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, [showControls, setShowControls]);
+
+  // Toggle controls on tap (mobile) - listen on document to catch all clicks
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      // Don't toggle if clicking on a button or link
+      const target = e.target as HTMLElement;
+      if (target.closest('button, a, input, select')) {
+        return;
+      }
+
+      // Click in center area toggles controls
+      const clickX = e.clientX;
+      const width = window.innerWidth;
+      const leftZone = width * 0.15;
+      const rightZone = width * 0.85;
+
+      if (clickX > leftZone && clickX < rightZone) {
+        toggleControls();
+      }
+    };
+
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, [toggleControls]);
+
   // Handle Escape key to close settings panel
   useEffect(() => {
     if (!showSettings) return;
@@ -164,6 +209,40 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
             </a>
 
             <div className="flex items-center gap-4">
+              {/* AI Recap Button */}
+              <button
+                onClick={() => setShowAiRecap(true)}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950 hover:bg-sky-100 dark:hover:bg-sky-900 rounded transition-colors border border-sky-200 dark:border-sky-800"
+                title="AI Recap"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
+                  />
+                </svg>
+                AI Recap
+              </button>
+
+              {/* AI Chapter Summary Button */}
+              <button
+                onClick={() => setShowAiChapterSummary(true)}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950 hover:bg-sky-100 dark:hover:bg-sky-900 rounded transition-colors border border-sky-200 dark:border-sky-800"
+                title="Summarize Chapter"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
+                  />
+                </svg>
+                Summarize
+              </button>
+
               <a
                 href="/highlights"
                 className="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
@@ -210,6 +289,13 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
           position={currentSelection.position}
           onHighlight={(color: HighlightColor) => createHighlight(color)}
           onAddNote={() => setShowNoteEditor(true)}
+          onExplain={() => {
+            setAiExplanationData({
+              text: currentSelection.text,
+              position: currentSelection.position,
+            });
+            setShowAiExplanation(true);
+          }}
           onClose={() => setCurrentSelection(null)}
         />
       )}
@@ -249,6 +335,48 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
         pagesRemaining={stats.pagesRemaining}
         timeRemaining={stats.timeRemaining}
         showControls={showControls}
+      />
+
+      {/* AI Recap (Phase 4) */}
+      <AiRecap
+        isOpen={showAiRecap}
+        onClose={() => setShowAiRecap(false)}
+        sessionData={{
+          pagesRead,
+          timeReadMinutes: Math.floor((Date.now() - sessionStartTime.getTime()) / 60000),
+          bookGenre: 'fiction', // Mock - would be inferred from book metadata
+        }}
+      />
+
+      {/* AI Explanation (Phase 4) */}
+      {showAiExplanation && aiExplanationData && (
+        <AiExplanation
+          selectedText={aiExplanationData.text}
+          position={aiExplanationData.position}
+          onClose={() => {
+            setShowAiExplanation(false);
+            setAiExplanationData(null);
+            setCurrentSelection(null);
+          }}
+          onSaveToNote={async (explanation) => {
+            // Create highlight with explanation as note
+            const highlightId = await createHighlight('yellow');
+            if (highlightId) {
+              await updateNote(highlightId, explanation);
+            }
+          }}
+        />
+      )}
+
+      {/* AI Chapter Summary (Phase 4) */}
+      <AiChapterSummary
+        isOpen={showAiChapterSummary}
+        onClose={() => setShowAiChapterSummary(false)}
+        chapterData={{
+          title: 'Current Chapter', // Mock - would come from EPUB metadata
+          number: 1,
+          wordCount: 3000,
+        }}
       />
 
       {/* Reader Container */}
