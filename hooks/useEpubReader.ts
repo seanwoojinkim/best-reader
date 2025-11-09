@@ -52,6 +52,7 @@ export function useEpubReader({
       height: '100%',
       flow: 'paginated',
       snap: true,
+      allowScriptedContent: true, // Allow scripts in iframe to enable click forwarding
     });
 
     setRendition(newRendition);
@@ -85,6 +86,41 @@ export function useEpubReader({
       },
     });
   }, [rendition, theme, fontSize, fontFamily, lineHeight]);
+
+  // Forward iframe clicks to parent for TapZones to work
+  useEffect(() => {
+    if (!rendition || !containerRef.current) return;
+
+    const handleIframeClick = (event: MouseEvent) => {
+      // Get the iframe element
+      const iframe = containerRef.current?.querySelector('iframe');
+      if (!iframe) return;
+
+      // Get click coordinates relative to viewport
+      const iframeRect = iframe.getBoundingClientRect();
+      const viewportX = iframeRect.left + event.clientX;
+      const viewportY = iframeRect.top + event.clientY;
+
+      // Create synthetic click event on parent document
+      const syntheticEvent = new MouseEvent('click', {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+        clientX: viewportX,
+        clientY: viewportY,
+      });
+
+      // Dispatch to the container element (TapZones wrapper)
+      containerRef.current?.dispatchEvent(syntheticEvent);
+    };
+
+    // Listen for clicks from epub.js
+    rendition.on('click', handleIframeClick);
+
+    return () => {
+      rendition.off('click', handleIframeClick);
+    };
+  }, [rendition, containerRef]);
 
   // Generate locations for progress tracking (Phase 3)
   useEffect(() => {

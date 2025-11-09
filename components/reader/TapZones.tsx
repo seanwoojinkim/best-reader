@@ -32,6 +32,9 @@ export default function TapZones({
     const clickX = clientX - left;
     const percentage = clickX / width;
 
+    // Stop event from bubbling to prevent double-handling
+    event.stopPropagation();
+
     if (percentage < TAP_ZONES.left) {
       // Left zone - previous page
       onPrevPage();

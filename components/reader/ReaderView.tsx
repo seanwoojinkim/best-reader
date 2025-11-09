@@ -121,30 +121,6 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, [showControls, setShowControls]);
 
-  // Toggle controls on tap (mobile) - listen on document to catch all clicks
-  useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      // Don't toggle if clicking on a button or link
-      const target = e.target as HTMLElement;
-      if (target.closest('button, a, input, select')) {
-        return;
-      }
-
-      // Click in center area toggles controls
-      const clickX = e.clientX;
-      const width = window.innerWidth;
-      const leftZone = width * 0.15;
-      const rightZone = width * 0.85;
-
-      if (clickX > leftZone && clickX < rightZone) {
-        toggleControls();
-      }
-    };
-
-    document.addEventListener('click', handleClick);
-    return () => document.removeEventListener('click', handleClick);
-  }, [toggleControls]);
-
   // Handle Escape key to close settings panel
   useEffect(() => {
     if (!showSettings) return;
