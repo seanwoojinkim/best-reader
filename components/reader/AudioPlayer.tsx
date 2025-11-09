@@ -16,6 +16,8 @@ interface AudioPlayerProps {
   onSeek: (time: number) => void;
   onSpeedChange: (speed: number) => void;
   onClose: () => void;
+  syncEnabled?: boolean;
+  onToggleSync?: () => void;
 }
 
 const PLAYBACK_SPEEDS = [0.75, 1.0, 1.25, 1.5, 2.0];
@@ -32,6 +34,8 @@ export default function AudioPlayer({
   onSeek,
   onSpeedChange,
   onClose,
+  syncEnabled = true,
+  onToggleSync,
 }: AudioPlayerProps) {
   const [seeking, setSeeking] = useState(false);
   const [tempSeekTime, setTempSeekTime] = useState(0);
@@ -134,6 +138,29 @@ export default function AudioPlayer({
             >
               {playbackSpeed}x
             </button>
+
+            {/* Sync Toggle (TTS Phase 4) */}
+            {onToggleSync && (
+              <button
+                onClick={onToggleSync}
+                className={`p-2 rounded transition-colors ${
+                  syncEnabled
+                    ? 'text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-950'
+                    : 'text-gray-400 dark:text-gray-600 bg-gray-100 dark:bg-gray-800'
+                }`}
+                title={syncEnabled ? 'Sync enabled: audio updates reading position' : 'Sync disabled'}
+                aria-label={syncEnabled ? 'Disable sync' : 'Enable sync'}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
+                </svg>
+              </button>
+            )}
 
             {/* Play/Pause Button */}
             <button

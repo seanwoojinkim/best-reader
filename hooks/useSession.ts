@@ -21,11 +21,17 @@ export function useSession({ bookId, currentCfi, onSessionEnd }: UseSessionProps
   const recentTurnTimesRef = useRef<number[]>([]);
   const [sessionStartTime] = useState(() => new Date());
 
+  // TTS listening time tracking (Phase 4)
+  const [listeningTime, setListeningTime] = useState(0); // seconds
+  const listeningTimeRef = useRef(0);
+  const listeningStartRef = useRef<number | null>(null);
+
   // Keep refs in sync with state
   useEffect(() => {
     pagesReadRef.current = pagesRead;
     wordsReadRef.current = wordsRead;
-  }, [pagesRead, wordsRead]);
+    listeningTimeRef.current = listeningTime;
+  }, [pagesRead, wordsRead, listeningTime]);
 
   // Start session on mount
   useEffect(() => {
@@ -121,12 +127,44 @@ export function useSession({ bookId, currentCfi, onSessionEnd }: UseSessionProps
     }
   }, [onSessionEnd]);
 
+  // TTS listening time tracking functions (Phase 4)
+  const startListening = useCallback(() => {
+    listeningStartRef.current = Date.now();
+  }, []);
+
+  const stopListening = useCallback(() => {
+    if (listeningStartRef.current !== null) {
+      const elapsed = (Date.now() - listeningStartRef.current) / 1000; // Convert to seconds
+      const newListeningTime = listeningTime + elapsed;
+      setListeningTime(newListeningTime);
+      listeningTimeRef.current = newListeningTime;
+      listeningStartRef.current = null;
+
+      // Update session in database
+      if (sessionIdRef.current !== null) {
+        updateSession(sessionIdRef.current, {
+          listeningTime: Math.floor(newListeningTime / 60), // Convert to minutes
+        });
+      }
+    }
+  }, [listeningTime]);
+
+  const trackListeningTime = useCallback((isPlaying: boolean) => {
+    if (isPlaying) {
+      startListening();
+    } else {
+      stopListening();
+    }
+  }, [startListening, stopListening]);
+
   return {
     sessionId,
     pagesRead,
     wordsRead,
+    listeningTime: Math.floor(listeningTime / 60), // Return as minutes
     sessionStartTime,
     trackPageTurn,
+    trackListeningTime,
     endCurrentSession,
   };
 }
