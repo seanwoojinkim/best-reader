@@ -1,6 +1,18 @@
 import ePub, { Book as EpubBook } from 'epubjs';
 
 /**
+ * Helper function to wrap promises with a timeout
+ */
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`Operation timed out after ${timeoutMs}ms`)), timeoutMs)
+    )
+  ]);
+}
+
+/**
  * Extract metadata from EPUB file
  */
 export async function extractEpubMetadata(file: File): Promise<{
@@ -12,17 +24,18 @@ export async function extractEpubMetadata(file: File): Promise<{
     const arrayBuffer = await file.arrayBuffer();
     const book = ePub(arrayBuffer);
 
-    await book.ready;
+    // Wait for book to be ready with 10 second timeout
+    await withTimeout(book.ready, 10000);
 
     // Extract metadata
     const metadata = await book.loaded.metadata;
     const title = metadata.title || file.name.replace('.epub', '');
     const author = metadata.creator || 'Unknown Author';
 
-    // Extract cover image
+    // Extract cover image with timeout
     let coverUrl: string | undefined;
     try {
-      const cover = await book.coverUrl();
+      const cover = await withTimeout(book.coverUrl(), 5000);
       if (cover) {
         coverUrl = cover;
       }

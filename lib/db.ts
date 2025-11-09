@@ -47,9 +47,15 @@ export async function addBook(book: Omit<Book, 'id' | 'addedAt'>): Promise<numbe
 
 /**
  * Get all books from library
+ * Orders by lastOpenedAt if available, otherwise by addedAt (newest first)
  */
 export async function getAllBooks(): Promise<Book[]> {
-  return await db.books.orderBy('lastOpenedAt').reverse().toArray();
+  const books = await db.books.toArray();
+  return books.sort((a, b) => {
+    const aTime = a.lastOpenedAt || a.addedAt;
+    const bTime = b.lastOpenedAt || b.addedAt;
+    return bTime.getTime() - aTime.getTime();
+  });
 }
 
 /**
