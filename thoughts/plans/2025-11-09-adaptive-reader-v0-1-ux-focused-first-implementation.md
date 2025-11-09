@@ -10,7 +10,8 @@ feature: "adaptive-reader-v0.1"
 # Update phase status as implementation progresses
 phases:
   - name: "Phase 1: Core Reading Experience & EPUB Loading"
-    status: pending
+    status: complete
+    completed_date: 2025-11-09
   - name: "Phase 2: Highlighting & Session Management"
     status: pending
   - name: "Phase 3: UI Polish & Adaptive Tracking"
