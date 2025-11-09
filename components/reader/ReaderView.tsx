@@ -5,10 +5,14 @@ import dynamic from 'next/dynamic';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { savePosition } from '@/lib/db';
 import { useEpubReader } from '@/hooks/useEpubReader';
+import { useHighlights } from '@/hooks/useHighlights';
+import { useSession } from '@/hooks/useSession';
 import { UI_CONSTANTS } from '@/lib/constants';
+import type { HighlightColor } from '@/lib/constants';
 import TapZones from './TapZones';
-import ThemeToggle from '../shared/ThemeToggle';
-import TypographySettings from '../shared/TypographySettings';
+import SettingsDrawer from './SettingsDrawer';
+import HighlightMenu from './HighlightMenu';
+import NoteEditor from './NoteEditor';
 
 // Dynamically import to avoid SSR issues with epub.js
 const ReaderViewContent = dynamic(() => Promise.resolve(ReaderViewContentComponent), {
@@ -24,6 +28,7 @@ interface ReaderViewProps {
 function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showNoteEditor, setShowNoteEditor] = useState(false);
   const { showControls, toggleControls, setShowControls } = useSettingsStore();
 
   const { book, rendition, loading, currentLocation, progress, nextPage, prevPage, goToLocation } =
@@ -41,11 +46,30 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
           });
         } catch (error) {
           console.error('Failed to save reading position:', error);
-          // Position save failed but user can continue reading
-          // Future: could show a toast notification
         }
+
+        // Track page turn for session
+        trackPageTurn();
       },
     });
+
+  // Session tracking
+  const { sessionId, pagesRead, trackPageTurn } = useSession({
+    bookId,
+  });
+
+  // Highlighting
+  const {
+    currentSelection,
+    editingNote,
+    createHighlight,
+    updateNote,
+    setCurrentSelection,
+    setEditingNote,
+  } = useHighlights({
+    bookId,
+    rendition,
+  });
 
   // Load initial position
   useEffect(() => {
@@ -123,17 +147,22 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
           <div className="flex items-center justify-between">
             <a
               href="/"
-              className="text-sm font-medium text-gray-700 hover:text-gray-900 transition-colors"
+              className="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
             >
               ← Library
             </a>
 
             <div className="flex items-center gap-4">
-              <ThemeToggle />
+              <a
+                href="/highlights"
+                className="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
+              >
+                Highlights
+              </a>
               <button
                 onClick={() => setShowSettings(!showSettings)}
                 className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                aria-label="Typography settings"
+                aria-label="Settings"
               >
                 <svg
                   className="w-6 h-6"
@@ -160,34 +189,47 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
         </div>
       </div>
 
-      {/* Settings Panel */}
-      {showSettings && (
-        <div
-          className={`
-            absolute top-16 right-4 z-20 w-80 bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 p-6
-            transition-opacity duration-200
-            ${showSettings ? 'opacity-100' : 'opacity-0 pointer-events-none'}
-          `}
-        >
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold">Typography</h3>
-            <button
-              onClick={() => setShowSettings(false)}
-              className="text-gray-400 hover:text-gray-600"
-              aria-label="Close settings"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
-          </div>
-          <TypographySettings />
-        </div>
+      {/* Settings Drawer */}
+      <SettingsDrawer isOpen={showSettings} onClose={() => setShowSettings(false)} />
+
+      {/* Highlight Menu */}
+      {currentSelection && (
+        <HighlightMenu
+          selectedText={currentSelection.text}
+          position={currentSelection.position}
+          onHighlight={(color: HighlightColor) => createHighlight(color)}
+          onAddNote={() => setShowNoteEditor(true)}
+          onClose={() => setCurrentSelection(null)}
+        />
+      )}
+
+      {/* Note Editor */}
+      {showNoteEditor && currentSelection && (
+        <NoteEditor
+          highlightText={currentSelection.text}
+          onSave={async (note) => {
+            // Create highlight with note
+            const highlightId = await createHighlight('yellow');
+            if (highlightId) {
+              await updateNote(highlightId, note);
+            }
+            setShowNoteEditor(false);
+            setCurrentSelection(null);
+          }}
+          onCancel={() => {
+            setShowNoteEditor(false);
+          }}
+        />
+      )}
+
+      {/* Edit existing highlight note */}
+      {editingNote && !showNoteEditor && (
+        <NoteEditor
+          initialNote={editingNote.note}
+          highlightText={editingNote.text}
+          onSave={(note) => updateNote(editingNote.id!, note)}
+          onCancel={() => setEditingNote(null)}
+        />
       )}
 
       {/* Progress Bar */}

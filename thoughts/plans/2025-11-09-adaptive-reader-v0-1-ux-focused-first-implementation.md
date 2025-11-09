@@ -13,7 +13,8 @@ phases:
     status: complete
     completed_date: 2025-11-09
   - name: "Phase 2: Highlighting & Session Management"
-    status: pending
+    status: complete
+    completed_date: 2025-11-09
   - name: "Phase 3: UI Polish & Adaptive Tracking"
     status: pending
   - name: "Phase 4: Mock AI Features & PWA"

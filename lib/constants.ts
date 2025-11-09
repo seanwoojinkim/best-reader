@@ -44,5 +44,14 @@ export const UI_CONSTANTS = {
   controlsAutoHideDelay: 3000, // milliseconds - how long to wait before hiding controls
 } as const;
 
+// Highlight colors (exact research-backed values)
+export const HIGHLIGHT_COLORS = {
+  yellow: '#FEF3C7',  // Default
+  blue: '#DBEAFE',
+  orange: '#FED7AA',
+  pink: '#FCE7F3',
+} as const;
+
 export type Theme = keyof typeof THEME_COLORS;
 export type FontFamily = 'serif' | 'sans-serif';
+export type HighlightColor = keyof typeof HIGHLIGHT_COLORS;
