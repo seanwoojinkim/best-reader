@@ -7,12 +7,14 @@ import { savePosition } from '@/lib/db';
 import { useEpubReader } from '@/hooks/useEpubReader';
 import { useHighlights } from '@/hooks/useHighlights';
 import { useSession } from '@/hooks/useSession';
+import { useReadingStats } from '@/hooks/useReadingStats';
 import { UI_CONSTANTS } from '@/lib/constants';
 import type { HighlightColor } from '@/lib/constants';
 import TapZones from './TapZones';
 import SettingsDrawer from './SettingsDrawer';
 import HighlightMenu from './HighlightMenu';
 import NoteEditor from './NoteEditor';
+import ProgressIndicators from './ProgressIndicators';
 
 // Dynamically import to avoid SSR issues with epub.js
 const ReaderViewContent = dynamic(() => Promise.resolve(ReaderViewContentComponent), {
@@ -31,7 +33,7 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
   const [showNoteEditor, setShowNoteEditor] = useState(false);
   const { showControls, toggleControls, setShowControls } = useSettingsStore();
 
-  const { book, rendition, loading, currentLocation, progress, nextPage, prevPage, goToLocation } =
+  const { book, rendition, loading, currentLocation, progress, totalLocations, nextPage, prevPage, goToLocation } =
     useEpubReader({
       bookBlob,
       containerRef,
@@ -53,9 +55,18 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
       },
     });
 
-  // Session tracking
-  const { sessionId, pagesRead, trackPageTurn } = useSession({
+  // Session tracking (Phase 3: now includes analytics)
+  const { sessionId, pagesRead, sessionStartTime, trackPageTurn } = useSession({
     bookId,
+    currentCfi: currentLocation,
+  });
+
+  // Reading stats for progress indicators (Phase 3)
+  const stats = useReadingStats({
+    totalLocations: totalLocations || 0,
+    currentLocation: currentLocation ? 1 : 0, // Simplified for now
+    pagesRead,
+    sessionStartTime,
   });
 
   // Highlighting
@@ -232,19 +243,13 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
         />
       )}
 
-      {/* Progress Bar */}
-      <div
-        className={`
-          absolute bottom-0 left-0 right-0 z-10 h-1 bg-gray-200 dark:bg-gray-700
-          transition-opacity duration-300
-          ${showControls ? 'opacity-100' : 'opacity-0'}
-        `}
-      >
-        <div
-          className="h-full bg-gray-900 dark:bg-gray-100 transition-all duration-300"
-          style={{ width: `${progress}%` }}
-        />
-      </div>
+      {/* Progress Indicators (Phase 3) */}
+      <ProgressIndicators
+        progress={progress}
+        pagesRemaining={stats.pagesRemaining}
+        timeRemaining={stats.timeRemaining}
+        showControls={showControls}
+      />
 
       {/* Reader Container */}
       <TapZones onPrevPage={prevPage} onNextPage={nextPage} onToggleControls={toggleControls}>

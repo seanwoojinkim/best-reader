@@ -20,6 +20,7 @@ export function useEpubReader({
   const [loading, setLoading] = useState(true);
   const [currentLocation, setCurrentLocation] = useState<string>('');
   const [progress, setProgress] = useState(0);
+  const [totalLocations, setTotalLocations] = useState<number>(0);
 
   const { theme, fontSize, fontFamily, lineHeight } = useSettingsStore();
 
@@ -85,6 +86,22 @@ export function useEpubReader({
     });
   }, [rendition, theme, fontSize, fontFamily, lineHeight]);
 
+  // Generate locations for progress tracking (Phase 3)
+  useEffect(() => {
+    if (!book) return;
+
+    const generateLocations = async () => {
+      try {
+        const locs = await book.locations.generate(1600); // Average chars per page
+        setTotalLocations(locs.length || 0);
+      } catch (error) {
+        console.error('Error generating locations:', error);
+      }
+    };
+
+    generateLocations();
+  }, [book]);
+
   // Track location changes
   useEffect(() => {
     if (!rendition) return;
@@ -139,6 +156,7 @@ export function useEpubReader({
     loading,
     currentLocation,
     progress,
+    totalLocations,
     nextPage,
     prevPage,
     goToLocation,

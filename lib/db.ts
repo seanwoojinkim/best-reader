@@ -1,11 +1,12 @@
 import Dexie, { Table } from 'dexie';
-import type { Book, ReadingPosition, Session, Highlight } from '@/types';
+import type { Book, ReadingPosition, Session, Highlight, Analytics } from '@/types';
 
 export class ReaderDatabase extends Dexie {
   books!: Table<Book, number>;
   positions!: Table<ReadingPosition, number>;
   sessions!: Table<Session, number>;
   highlights!: Table<Highlight, number>;
+  analytics!: Table<Analytics, number>;
 
   constructor() {
     super('AdaptiveReaderDB');
@@ -15,6 +16,15 @@ export class ReaderDatabase extends Dexie {
       positions: 'bookId, updatedAt',
       sessions: '++id, bookId, startTime, endTime',
       highlights: '++id, bookId, cfiRange, color, createdAt',
+    });
+
+    // Version 2: Add analytics table (Phase 3)
+    this.version(2).stores({
+      books: '++id, title, author, addedAt, lastOpenedAt, *tags',
+      positions: 'bookId, updatedAt',
+      sessions: '++id, bookId, startTime, endTime',
+      highlights: '++id, bookId, cfiRange, color, createdAt',
+      analytics: '++id, sessionId, bookId, timestamp, event',
     });
   }
 }
@@ -212,4 +222,73 @@ export async function getSessions(bookId: number): Promise<Session[]> {
 export async function getLastSession(bookId: number): Promise<Session | undefined> {
   const sessions = await getSessions(bookId);
   return sessions[0];
+}
+
+// ============================================================
+// Analytics Management Functions (Phase 3)
+// ============================================================
+
+/**
+ * Track an analytics event (page turn, slowdown, etc.)
+ */
+export async function trackAnalyticsEvent(event: Omit<Analytics, 'id' | 'timestamp'>): Promise<number> {
+  const analyticsEvent: Analytics = {
+    ...event,
+    timestamp: new Date(),
+  };
+  return await db.analytics.add(analyticsEvent);
+}
+
+/**
+ * Get analytics for a specific session
+ */
+export async function getSessionAnalytics(sessionId: number): Promise<Analytics[]> {
+  return await db.analytics.where('sessionId').equals(sessionId).sortBy('timestamp');
+}
+
+/**
+ * Get analytics for a book (all sessions)
+ */
+export async function getBookAnalytics(bookId: number): Promise<Analytics[]> {
+  return await db.analytics.where('bookId').equals(bookId).sortBy('timestamp');
+}
+
+/**
+ * Calculate reading insights from analytics
+ * Returns: { avgTurnTime, slowdownCount, totalPageTurns }
+ */
+export async function getReadingInsights(sessionId: number): Promise<{
+  avgTurnTime: number;
+  slowdownCount: number;
+  totalPageTurns: number;
+}> {
+  const analytics = await getSessionAnalytics(sessionId);
+
+  const pageTurns = analytics.filter((a) => a.event === 'page_turn');
+  const slowdowns = analytics.filter((a) => a.event === 'slowdown');
+
+  const turnTimes = pageTurns
+    .map((a) => a.timeSinceLastTurn)
+    .filter((t): t is number => t !== undefined);
+
+  const avgTurnTime = turnTimes.length > 0
+    ? turnTimes.reduce((sum, t) => sum + t, 0) / turnTimes.length
+    : 0;
+
+  return {
+    avgTurnTime,
+    slowdownCount: slowdowns.length,
+    totalPageTurns: pageTurns.length,
+  };
+}
+
+/**
+ * Clean up old analytics (optional, for performance)
+ * Deletes analytics older than specified days
+ */
+export async function cleanupOldAnalytics(daysToKeep: number = 90): Promise<void> {
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - daysToKeep);
+
+  await db.analytics.where('timestamp').below(cutoffDate).delete();
 }

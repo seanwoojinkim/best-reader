@@ -1,18 +1,25 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { startSession, endSession, updateSession } from '@/lib/db';
+import { startSession, endSession, updateSession, trackAnalyticsEvent } from '@/lib/db';
+import { isSlowdown, isSpeedUp } from '@/lib/analytics';
 
 interface UseSessionProps {
   bookId: number;
+  currentCfi?: string;
   onSessionEnd?: (sessionId: number) => void;
 }
 
-export function useSession({ bookId, onSessionEnd }: UseSessionProps) {
+export function useSession({ bookId, currentCfi, onSessionEnd }: UseSessionProps) {
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [pagesRead, setPagesRead] = useState(0);
   const [wordsRead, setWordsRead] = useState(0);
   const sessionIdRef = useRef<number | null>(null);
   const pagesReadRef = useRef(0);
   const wordsReadRef = useRef(0);
+
+  // Analytics tracking (Phase 3)
+  const lastTurnTimeRef = useRef<number | null>(null);
+  const recentTurnTimesRef = useRef<number[]>([]);
+  const [sessionStartTime] = useState(() => new Date());
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -39,8 +46,11 @@ export function useSession({ bookId, onSessionEnd }: UseSessionProps) {
     };
   }, [bookId, onSessionEnd]);
 
-  // Track page turn
+  // Track page turn with analytics (Phase 3)
   const trackPageTurn = useCallback(async () => {
+    const now = Date.now();
+    const turnTime = lastTurnTimeRef.current !== null ? now - lastTurnTimeRef.current : null;
+
     setPagesRead((prev) => prev + 1);
 
     // Estimate words per page (average ~250 words per typical fiction book)
@@ -53,6 +63,45 @@ export function useSession({ bookId, onSessionEnd }: UseSessionProps) {
     const estimatedWords = 250;
     setWordsRead((prev) => prev + estimatedWords);
 
+    // Analytics tracking (Phase 3)
+    if (sessionIdRef.current !== null && turnTime !== null) {
+      // Track page turn event
+      await trackAnalyticsEvent({
+        sessionId: sessionIdRef.current,
+        bookId,
+        event: 'page_turn',
+        timeSinceLastTurn: turnTime,
+        cfi: currentCfi,
+      });
+
+      // Detect slowdowns/speedups
+      const recentTimes = recentTurnTimesRef.current;
+
+      if (isSlowdown(turnTime, recentTimes)) {
+        await trackAnalyticsEvent({
+          sessionId: sessionIdRef.current,
+          bookId,
+          event: 'slowdown',
+          timeSinceLastTurn: turnTime,
+          cfi: currentCfi,
+          metadata: { avgTurnTime: recentTimes.reduce((a, b) => a + b, 0) / recentTimes.length },
+        });
+      } else if (isSpeedUp(turnTime, recentTimes)) {
+        await trackAnalyticsEvent({
+          sessionId: sessionIdRef.current,
+          bookId,
+          event: 'speed_up',
+          timeSinceLastTurn: turnTime,
+          cfi: currentCfi,
+        });
+      }
+
+      // Update rolling window (keep last 10 turn times)
+      recentTurnTimesRef.current = [...recentTimes, turnTime].slice(-10);
+    }
+
+    lastTurnTimeRef.current = now;
+
     // Update session in database periodically
     if (sessionIdRef.current !== null) {
       await updateSession(sessionIdRef.current, {
@@ -60,7 +109,7 @@ export function useSession({ bookId, onSessionEnd }: UseSessionProps) {
         wordsRead: wordsRead + estimatedWords,
       });
     }
-  }, [pagesRead, wordsRead]);
+  }, [bookId, currentCfi, pagesRead, wordsRead]);
 
   // Manual session end (for testing or explicit close)
   const endCurrentSession = useCallback(async () => {
@@ -76,6 +125,7 @@ export function useSession({ bookId, onSessionEnd }: UseSessionProps) {
     sessionId,
     pagesRead,
     wordsRead,
+    sessionStartTime,
     trackPageTurn,
     endCurrentSession,
   };

@@ -2,9 +2,19 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { getBook, getPosition, updateBookLastOpened } from '@/lib/db';
-import type { Book, ReadingPosition } from '@/types';
+import {
+  getBook,
+  getPosition,
+  updateBookLastOpened,
+  getLastSession,
+  getAllHighlights,
+} from '@/lib/db';
+import { shouldShowRecap } from '@/lib/analytics';
+import type { Book, ReadingPosition, Session, Highlight } from '@/types';
 import ReaderView from '@/components/reader/ReaderView';
+import RecapModal from '@/components/reader/RecapModal';
+
+const RECAP_SHOWN_KEY = 'recap-shown-session';
 
 export default function ReaderPage() {
   const params = useParams();
@@ -14,6 +24,11 @@ export default function ReaderPage() {
   const [position, setPosition] = useState<ReadingPosition | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Phase 3: Recap modal state
+  const [showRecap, setShowRecap] = useState(false);
+  const [lastSession, setLastSession] = useState<Session | null>(null);
+  const [lastHighlight, setLastHighlight] = useState<Highlight | null>(null);
 
   useEffect(() => {
     const loadBook = async () => {
@@ -37,6 +52,28 @@ export default function ReaderPage() {
         // Get saved reading position
         const positionData = await getPosition(bookId);
         setPosition(positionData || null);
+
+        // Phase 3: Check if we should show recap modal
+        const recapShownThisSession = sessionStorage.getItem(RECAP_SHOWN_KEY);
+        if (!recapShownThisSession) {
+          const previousSession = await getLastSession(bookId);
+          if (previousSession && previousSession.endTime) {
+            const currentSessionStart = new Date();
+            if (shouldShowRecap(previousSession.endTime, currentSessionStart)) {
+              setLastSession(previousSession);
+
+              // Get last highlight for this book
+              const allHighlights = await getAllHighlights();
+              const bookHighlights = allHighlights.filter((h) => h.bookId === bookId);
+              if (bookHighlights.length > 0) {
+                setLastHighlight(bookHighlights[0]); // Most recent
+              }
+
+              setShowRecap(true);
+              sessionStorage.setItem(RECAP_SHOWN_KEY, 'true');
+            }
+          }
+        }
 
         // Update last opened timestamp
         await updateBookLastOpened(bookId);
@@ -104,10 +141,22 @@ export default function ReaderPage() {
   }
 
   return (
-    <ReaderView
-      bookId={bookId}
-      bookBlob={book.fileBlob}
-      initialCfi={position?.cfi}
-    />
+    <>
+      {/* Phase 3: Recap Modal */}
+      {showRecap && lastSession && (
+        <RecapModal
+          lastSession={lastSession}
+          lastHighlight={lastHighlight || undefined}
+          bookTitle={book.title}
+          onContinue={() => setShowRecap(false)}
+        />
+      )}
+
+      <ReaderView
+        bookId={bookId}
+        bookBlob={book.fileBlob}
+        initialCfi={position?.cfi}
+      />
+    </>
   );
 }

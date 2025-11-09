@@ -53,3 +53,15 @@ export interface ReaderSettings {
   lineHeight: number; // 1.2-1.8
   margins: number; // 1-4rem
 }
+
+// Analytics interface (Phase 3) - Privacy-first, stored locally only
+export interface Analytics {
+  id?: number;
+  sessionId: number; // Reference to Session
+  bookId: number;
+  timestamp: Date;
+  event: 'page_turn' | 'slowdown' | 'speed_up' | 'pause';
+  timeSinceLastTurn?: number; // milliseconds
+  cfi?: string; // Current position
+  metadata?: Record<string, unknown>; // Flexible data storage
+}
