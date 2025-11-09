@@ -1,5 +1,5 @@
 import Dexie, { Table } from 'dexie';
-import type { Book, ReadingPosition, Session, Highlight, Analytics } from '@/types';
+import type { Book, ReadingPosition, Session, Highlight, Analytics, Chapter, AudioFile, AudioSettings, AudioUsage } from '@/types';
 
 export class ReaderDatabase extends Dexie {
   books!: Table<Book, number>;
@@ -7,6 +7,10 @@ export class ReaderDatabase extends Dexie {
   sessions!: Table<Session, number>;
   highlights!: Table<Highlight, number>;
   analytics!: Table<Analytics, number>;
+  chapters!: Table<Chapter, number>;
+  audioFiles!: Table<AudioFile, number>;
+  audioSettings!: Table<AudioSettings, number>;
+  audioUsage!: Table<AudioUsage, number>;
 
   constructor() {
     super('AdaptiveReaderDB');
@@ -25,6 +29,19 @@ export class ReaderDatabase extends Dexie {
       sessions: '++id, bookId, startTime, endTime',
       highlights: '++id, bookId, cfiRange, color, createdAt',
       analytics: '++id, sessionId, bookId, timestamp, event',
+    });
+
+    // Version 3: Add audio functionality (TTS Phase 1)
+    this.version(3).stores({
+      books: '++id, title, author, addedAt, lastOpenedAt, *tags',
+      positions: 'bookId, updatedAt',
+      sessions: '++id, bookId, startTime, endTime',
+      highlights: '++id, bookId, cfiRange, color, createdAt',
+      analytics: '++id, sessionId, bookId, timestamp, event',
+      chapters: '++id, bookId, order, cfiStart',
+      audioFiles: '++id, chapterId, generatedAt',
+      audioSettings: 'bookId, updatedAt',
+      audioUsage: '++id, chapterId, bookId, timestamp',
     });
   }
 }
@@ -76,12 +93,24 @@ export async function updateBookLastOpened(id: number): Promise<void> {
  * Delete a book and its associated data
  */
 export async function deleteBook(id: number): Promise<void> {
-  await db.transaction('rw', db.books, db.positions, db.sessions, db.highlights, async () => {
-    await db.books.delete(id);
-    await db.positions.where('bookId').equals(id).delete();
-    await db.sessions.where('bookId').equals(id).delete();
-    await db.highlights.where('bookId').equals(id).delete();
-  });
+  // Get all chapters for this book first (needed to delete audio files)
+  const chapters = await db.chapters.where('bookId').equals(id).toArray();
+  const chapterIds = chapters.map(c => c.id).filter((id): id is number => id !== undefined);
+
+  // Delete audio files associated with chapters
+  for (const chapterId of chapterIds) {
+    await db.audioFiles.where('chapterId').equals(chapterId).delete();
+  }
+
+  // Delete all book-related data
+  await db.books.delete(id);
+  await db.positions.where('bookId').equals(id).delete();
+  await db.sessions.where('bookId').equals(id).delete();
+  await db.highlights.where('bookId').equals(id).delete();
+  await db.analytics.where('bookId').equals(id).delete();
+  await db.chapters.where('bookId').equals(id).delete();
+  await db.audioSettings.where('bookId').equals(id).delete();
+  await db.audioUsage.where('bookId').equals(id).delete();
 }
 
 /**
@@ -114,12 +143,15 @@ export async function getPosition(bookId: number): Promise<ReadingPosition | und
  * Clear all data (for testing or reset)
  */
 export async function clearAllData(): Promise<void> {
-  await db.transaction('rw', db.books, db.positions, db.sessions, db.highlights, async () => {
-    await db.books.clear();
-    await db.positions.clear();
-    await db.sessions.clear();
-    await db.highlights.clear();
-  });
+  await db.books.clear();
+  await db.positions.clear();
+  await db.sessions.clear();
+  await db.highlights.clear();
+  await db.analytics.clear();
+  await db.chapters.clear();
+  await db.audioFiles.clear();
+  await db.audioSettings.clear();
+  await db.audioUsage.clear();
 }
 
 // ============================================================
@@ -297,4 +329,131 @@ export async function cleanupOldAnalytics(daysToKeep: number = 90): Promise<void
   cutoffDate.setDate(cutoffDate.getDate() - daysToKeep);
 
   await db.analytics.where('timestamp').below(cutoffDate).delete();
+}
+
+// ============================================================
+// Chapter Management Functions (TTS Phase 1)
+// ============================================================
+
+/**
+ * Save chapters for a book
+ */
+export async function saveChapters(chapters: Omit<Chapter, 'id'>[]): Promise<void> {
+  await db.chapters.bulkAdd(chapters);
+}
+
+/**
+ * Get chapters for a book
+ */
+export async function getChapters(bookId: number): Promise<Chapter[]> {
+  return await db.chapters.where('bookId').equals(bookId).sortBy('order');
+}
+
+/**
+ * Delete chapters when book is deleted
+ */
+export async function deleteChapters(bookId: number): Promise<void> {
+  await db.chapters.where('bookId').equals(bookId).delete();
+}
+
+// ============================================================
+// Audio File Management Functions (TTS Phase 2)
+// ============================================================
+
+/**
+ * Save generated audio file
+ */
+export async function saveAudioFile(audioFile: Omit<AudioFile, 'id'>): Promise<number> {
+  return await db.audioFiles.add(audioFile);
+}
+
+/**
+ * Get audio file for a chapter
+ */
+export async function getAudioFile(chapterId: number): Promise<AudioFile | undefined> {
+  return await db.audioFiles.where('chapterId').equals(chapterId).first();
+}
+
+/**
+ * Delete audio file for a chapter
+ */
+export async function deleteAudioFile(chapterId: number): Promise<void> {
+  await db.audioFiles.where('chapterId').equals(chapterId).delete();
+}
+
+/**
+ * Get all audio files for a book (via chapters)
+ */
+export async function getBookAudioFiles(bookId: number): Promise<AudioFile[]> {
+  const chapters = await getChapters(bookId);
+  const chapterIds = chapters.map(c => c.id!);
+  return await db.audioFiles.where('chapterId').anyOf(chapterIds).toArray();
+}
+
+/**
+ * Calculate total audio storage for a book
+ */
+export async function getBookAudioStorageSize(bookId: number): Promise<number> {
+  const audioFiles = await getBookAudioFiles(bookId);
+  return audioFiles.reduce((total, file) => total + file.sizeBytes, 0);
+}
+
+/**
+ * Log audio generation usage
+ */
+export async function logAudioUsage(usage: Omit<AudioUsage, 'id'>): Promise<number> {
+  return await db.audioUsage.add(usage);
+}
+
+/**
+ * Get audio usage for a book
+ */
+export async function getAudioUsage(bookId: number): Promise<AudioUsage[]> {
+  return await db.audioUsage.where('bookId').equals(bookId).sortBy('timestamp');
+}
+
+/**
+ * Calculate total cost for a book
+ */
+export async function getTotalAudioCost(bookId: number): Promise<number> {
+  const usage = await getAudioUsage(bookId);
+  return usage.reduce((total, u) => total + u.cost, 0);
+}
+
+/**
+ * Get audio settings for a book
+ */
+export async function getAudioSettings(bookId: number): Promise<AudioSettings | undefined> {
+  return await db.audioSettings.get(bookId);
+}
+
+/**
+ * Save audio settings for a book
+ */
+export async function saveAudioSettings(settings: AudioSettings): Promise<void> {
+  const existing = await db.audioSettings.get(settings.bookId);
+  if (existing) {
+    await db.audioSettings.update(settings.bookId, {
+      ...settings,
+      updatedAt: new Date(),
+    });
+  } else {
+    await db.audioSettings.add({
+      ...settings,
+      updatedAt: new Date(),
+    });
+  }
+}
+
+/**
+ * Get default audio settings
+ */
+export function getDefaultAudioSettings(bookId: number): AudioSettings {
+  return {
+    bookId,
+    voice: 'alloy',
+    playbackSpeed: 1.0,
+    autoPlay: false,
+    updatedAt: new Date(),
+  };
 }

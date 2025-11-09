@@ -8,6 +8,7 @@ interface HighlightMenuProps {
   position: { x: number; y: number };
   onHighlight: (color: HighlightColor) => void;
   onAddNote: () => void;
+  onExplain?: () => void;
   onClose: () => void;
 }
 
@@ -16,6 +17,7 @@ export default function HighlightMenu({
   position,
   onHighlight,
   onAddNote,
+  onExplain,
   onClose,
 }: HighlightMenuProps) {
   const handleHighlight = (color: HighlightColor) => {
@@ -67,6 +69,33 @@ export default function HighlightMenu({
             >
               Add Note
             </button>
+            {onExplain && (
+              <button
+                onClick={() => {
+                  onExplain();
+                  onClose();
+                }}
+                className="flex-1 px-3 py-1.5 text-sm font-medium text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950 hover:bg-sky-100 dark:hover:bg-sky-900 rounded transition-colors border border-sky-200 dark:border-sky-800"
+                title="AI Explanation"
+              >
+                <span className="flex items-center justify-center gap-1">
+                  <svg
+                    className="w-3 h-3"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
+                    />
+                  </svg>
+                  Explain
+                </span>
+              </button>
+            )}
           </div>
         </div>
 

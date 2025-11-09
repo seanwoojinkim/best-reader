@@ -32,6 +32,8 @@ export interface Session {
   wordsRead: number;
   avgSpeed?: number; // words per minute
   currentCFI?: string;
+  listeningTime?: number;     // TTS: Minutes spent listening
+  audioChapterId?: number;    // TTS: Current audio chapter
 }
 
 // Highlight interface (for Phase 2)
@@ -65,3 +67,55 @@ export interface Analytics {
   cfi?: string; // Current position
   metadata?: Record<string, unknown>; // Flexible data storage
 }
+
+// ============================================================
+// TTS Audio Interfaces (Phase 5: TTS)
+// ============================================================
+
+// Chapter interface
+export interface Chapter {
+  id?: number;
+  bookId: number;
+  title: string;
+  cfiStart: string;
+  cfiEnd: string;
+  wordCount: number;
+  charCount: number;
+  order: number;      // 1-indexed chapter number
+  level: number;      // Nesting level (1 = top-level)
+}
+
+// Audio file storage
+export interface AudioFile {
+  id?: number;
+  chapterId: number;
+  blob: Blob;         // MP3 audio data
+  duration: number;   // Seconds
+  voice: OpenAIVoice;
+  speed: number;
+  generatedAt: Date;
+  sizeBytes: number;
+}
+
+// Audio settings per book
+export interface AudioSettings {
+  bookId: number;     // Primary key
+  voice: OpenAIVoice;
+  playbackSpeed: number;
+  autoPlay: boolean;
+  updatedAt: Date;
+}
+
+// Audio usage tracking
+export interface AudioUsage {
+  id?: number;
+  chapterId: number;
+  bookId: number;
+  charCount: number;
+  cost: number;       // USD
+  voice: OpenAIVoice;
+  timestamp: Date;
+}
+
+// OpenAI voice types
+export type OpenAIVoice = 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer';

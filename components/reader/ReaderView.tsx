@@ -8,6 +8,11 @@ import { useEpubReader } from '@/hooks/useEpubReader';
 import { useHighlights } from '@/hooks/useHighlights';
 import { useSession } from '@/hooks/useSession';
 import { useReadingStats } from '@/hooks/useReadingStats';
+import { useChapters } from '@/hooks/useChapters';
+import { useAudioPlayer } from '@/hooks/useAudioPlayer';
+import { useAudioGeneration } from '@/hooks/useAudioGeneration';
+import { getAudioSettings, getDefaultAudioSettings } from '@/lib/db';
+import type { Chapter, AudioSettings } from '@/types';
 import { UI_CONSTANTS } from '@/lib/constants';
 import type { HighlightColor } from '@/lib/constants';
 import TapZones from './TapZones';
@@ -15,6 +20,8 @@ import SettingsDrawer from './SettingsDrawer';
 import HighlightMenu from './HighlightMenu';
 import NoteEditor from './NoteEditor';
 import ProgressIndicators from './ProgressIndicators';
+import AudioPlayer from './AudioPlayer';
+import ChapterList from './ChapterList';
 import AiRecap from './AiRecap';
 import AiExplanation from './AiExplanation';
 import AiChapterSummary from './AiChapterSummary';
@@ -38,6 +45,9 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
   const [showAiExplanation, setShowAiExplanation] = useState(false);
   const [showAiChapterSummary, setShowAiChapterSummary] = useState(false);
   const [aiExplanationData, setAiExplanationData] = useState<{ text: string; position: { x: number; y: number } } | null>(null);
+  const [showChapterList, setShowChapterList] = useState(false);
+  const [currentAudioChapter, setCurrentAudioChapter] = useState<Chapter | null>(null);
+  const [audioSettings, setAudioSettings] = useState<AudioSettings | null>(null);
   const { showControls, toggleControls, setShowControls } = useSettingsStore();
 
   const { book, rendition, loading, currentLocation, progress, totalLocations, nextPage, prevPage, goToLocation } =
@@ -76,6 +86,12 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
     sessionStartTime,
   });
 
+  // Chapter extraction (TTS Phase 1)
+  const { chapters, loading: chaptersLoading } = useChapters({
+    bookId,
+    book,
+  });
+
   // Highlighting
   const {
     currentSelection,
@@ -95,6 +111,37 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
       goToLocation(initialCfi);
     }
   }, [initialCfi, goToLocation]);
+
+  // Debug log for chapter extraction (TTS Phase 1)
+  useEffect(() => {
+    if (chapters.length > 0) {
+      console.log(`[TTS Phase 1] Extracted ${chapters.length} chapters:`, chapters);
+    }
+  }, [chapters]);
+
+  // Load audio settings (TTS Phase 3)
+  useEffect(() => {
+    const loadAudioSettings = async () => {
+      const settings = await getAudioSettings(bookId) || getDefaultAudioSettings(bookId);
+      setAudioSettings(settings);
+    };
+    loadAudioSettings();
+  }, [bookId]);
+
+  // Audio playback (TTS Phase 3)
+  const audioPlayer = useAudioPlayer({
+    chapter: currentAudioChapter,
+    onTimeUpdate: (currentTime, duration) => {
+      // TODO Phase 4: Sync reading position with audio playback
+    },
+    onEnded: () => {
+      setCurrentAudioChapter(null);
+    },
+  });
+
+  // Audio generation (TTS Phase 3)
+  const audioGeneration = useAudioGeneration({ book });
+  const [generatingChapterId, setGeneratingChapterId] = useState<number | null>(null);
 
   // Auto-hide controls after configured delay
   useEffect(() => {
@@ -225,6 +272,15 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
               >
                 Highlights
               </a>
+
+              {/* Chapters Button (TTS Phase 3) */}
+              <button
+                onClick={() => setShowChapterList(!showChapterList)}
+                className="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
+              >
+                Chapters
+              </button>
+
               <button
                 onClick={() => setShowSettings(!showSettings)}
                 className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
@@ -257,6 +313,61 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
 
       {/* Settings Drawer */}
       <SettingsDrawer isOpen={showSettings} onClose={() => setShowSettings(false)} />
+
+      {/* Chapter List Modal (TTS Phase 3) */}
+      {showChapterList && (
+        <>
+          <div
+            className="fixed inset-0 bg-black/50 z-40"
+            onClick={() => setShowChapterList(false)}
+          />
+          <div className="fixed left-0 top-0 bottom-0 w-80 bg-white dark:bg-gray-900 shadow-xl z-50 overflow-y-auto">
+            <div className="sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 p-4 flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Chapters</h2>
+              <button
+                onClick={() => setShowChapterList(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                aria-label="Close chapters list"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <ChapterList
+              chapters={chapters}
+              currentChapter={currentAudioChapter}
+              voice={audioSettings?.voice || 'alloy'}
+              onChapterSelect={(chapter) => {
+                // Navigate to chapter in reader
+                if (goToLocation && chapter.cfiStart) {
+                  goToLocation(chapter.cfiStart);
+                  setShowChapterList(false);
+                }
+              }}
+              onGenerateAudio={async (chapter) => {
+                setGeneratingChapterId(chapter.id || null);
+                const result = await audioGeneration.generateAudio({
+                  chapter,
+                  voice: audioSettings?.voice || 'alloy',
+                  speed: audioSettings?.playbackSpeed || 1.0,
+                });
+                setGeneratingChapterId(null);
+                if (result) {
+                  console.log('[TTS Phase 3] Audio generated successfully:', result);
+                }
+              }}
+              onPlayAudio={(chapter) => {
+                setCurrentAudioChapter(chapter);
+                setShowChapterList(false);
+              }}
+              generatingChapterId={generatingChapterId}
+              generationProgress={audioGeneration.progress}
+            />
+          </div>
+        </>
+      )}
 
       {/* Highlight Menu */}
       {currentSelection && (
@@ -302,6 +413,23 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
           highlightText={editingNote.text}
           onSave={(note) => updateNote(editingNote.id!, note)}
           onCancel={() => setEditingNote(null)}
+        />
+      )}
+
+      {/* Audio Player (TTS Phase 3) */}
+      {currentAudioChapter && (
+        <AudioPlayer
+          chapter={currentAudioChapter}
+          playing={audioPlayer.playing}
+          currentTime={audioPlayer.currentTime}
+          duration={audioPlayer.duration}
+          playbackSpeed={audioPlayer.playbackSpeed}
+          loading={audioPlayer.loading}
+          onPlay={audioPlayer.play}
+          onPause={audioPlayer.pause}
+          onSeek={audioPlayer.seek}
+          onSpeedChange={audioPlayer.setSpeed}
+          onClose={() => setCurrentAudioChapter(null)}
         />
       )}
 

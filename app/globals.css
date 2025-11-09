@@ -282,3 +282,27 @@ button {
     transform: none;
   }
 }
+
+/* ============================================
+   Phase 4: AI Content Visual Distinction
+   ============================================ */
+
+/* AI content styling - light blue tint with distinctive border */
+.ai-content {
+  background: #E0F2FE; /* Light blue */
+  border-left: 3px solid #0EA5E9; /* Sky-500 */
+  padding: 1rem;
+  border-radius: 0.5rem;
+}
+
+/* Dark mode AI content */
+.dark .ai-content {
+  background: rgba(7, 89, 133, 0.2); /* Sky-900 with opacity */
+  border-left-color: #38BDF8; /* Sky-400 */
+}
+
+/* Sepia mode AI content */
+body.theme-sepia .ai-content {
+  background: rgba(186, 230, 253, 0.3); /* Lighter blue tint for sepia */
+  border-left-color: #0EA5E9;
+}

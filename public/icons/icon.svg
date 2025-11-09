@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#1A1A1A"/>
+  <g transform="translate(106, 106)">
+    <!-- Book icon -->
+    <path fill="#E0F2FE" d="M150,0 C165,0 177,12 177,27 L177,273 C177,288 165,300 150,300 L30,300 C15,300 3,288 3,273 L3,27 C3,12 15,0 30,0 L150,0 Z"/>
+    <!-- Pages -->
+    <path fill="#F9F9F9" d="M150,15 L30,15 C23,15 18,20 18,27 L18,273 C18,280 23,285 30,285 L150,285 C157,285 162,280 162,273 L162,27 C162,20 157,15 150,15 Z"/>
+    <!-- AI Sparkle -->
+    <path fill="#0EA5E9" d="M210,60 L220,90 L250,100 L220,110 L210,140 L200,110 L170,100 L200,90 Z"/>
+    <!-- Text lines -->
+    <line x1="35" y1="50" x2="145" y2="50" stroke="#1A1A1A" stroke-width="3"/>
+    <line x1="35" y1="75" x2="145" y2="75" stroke="#1A1A1A" stroke-width="3"/>
+    <line x1="35" y1="100" x2="125" y2="100" stroke="#1A1A1A" stroke-width="3"/>
+    <line x1="35" y1="125" x2="145" y2="125" stroke="#1A1A1A" stroke-width="3"/>
+    <line x1="35" y1="150" x2="135" y2="150" stroke="#1A1A1A" stroke-width="3"/>
+  </g>
+</svg>
