@@ -427,12 +427,23 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
                   console.log('[TTS Phase 3] Audio generated successfully:', result);
                 }
               }}
-              onPlayAudio={(chapter) => {
+              onPlayAudio={async (chapter) => {
                 setCurrentAudioChapter(chapter);
                 setShowChapterList(false);
                 // Navigate to the chapter when playing audio
-                if (goToLocation && chapter.cfiStart) {
-                  goToLocation(chapter.cfiStart);
+                if (goToLocation && chapter.cfiStart && book) {
+                  try {
+                    // Ensure book is ready before navigation
+                    await book.ready;
+                    await goToLocation(chapter.cfiStart);
+                  } catch (error) {
+                    console.error('[ReaderView] Failed to navigate to chapter:', {
+                      error,
+                      chapterTitle: chapter.title,
+                      cfiStart: chapter.cfiStart
+                    });
+                    // If navigation fails, audio will still play from current position
+                  }
                 }
               }}
               generatingChapters={generatingChapters}
