@@ -5,7 +5,9 @@ import {
   logAudioUsage,
   saveSentenceSyncData,
   saveChunkAndUpdateProgress,
-  completeAudioFile
+  completeAudioFile,
+  deleteAudioChunks,
+  db
 } from '@/lib/db';
 import { getChapterText } from '@/lib/epub-utils';
 import { parseChapterIntoSentences } from '@/lib/sentence-parser';
@@ -21,6 +23,11 @@ interface GenerateAudioOptions {
   voice: OpenAIVoice;
   speed?: number;
   onProgress?: (progress: number, message?: string) => void;
+  /**
+   * Called after first chunk is successfully saved to IndexedDB.
+   * Transaction is guaranteed to be committed when this fires.
+   * Use this to start progressive playback immediately while remaining chunks generate.
+   */
   onFirstChunkReady?: (chapterId: number, audioFileId: number) => void;
 }
 
@@ -47,6 +54,11 @@ export function useAudioGeneration({ book }: UseAudioGenerationProps): UseAudioG
   }: GenerateAudioOptions): Promise<AudioFile | null> => {
     console.log('[useAudioGeneration] Starting generation for chapter:', chapter.title);
 
+    // TODO: Add resumption support for interrupted generations (Phase 2 Code Review Issue #1)
+    // Check for incomplete AudioFile and resume from last successful chunk:
+    // const existingAudioFile = await getIncompleteAudioFile(chapter.id);
+    // if (existingAudioFile) { startFromChunk = existingAudioFile.chunksComplete; }
+
     if (!book || !chapter.id) {
       console.error('[useAudioGeneration] Invalid chapter or book', { book, chapterId: chapter.id });
       setError('Invalid chapter or book');
@@ -59,6 +71,8 @@ export function useAudioGeneration({ book }: UseAudioGenerationProps): UseAudioG
 
     const controller = new AbortController();
     setAbortController(controller);
+
+    let audioFileId: number | null = null; // Declare outside try block for cleanup access
 
     try {
       // Step 1: Extract chapter text (10%)
@@ -108,9 +122,11 @@ export function useAudioGeneration({ book }: UseAudioGenerationProps): UseAudioG
       }
 
       let buffer = '';
-      let audioFileId: number | null = null;
-      const chunks: Array<Omit<AudioChunk, 'id'>> = [];
+      // audioFileId declared at function scope for cleanup access
+      // Store only metadata to avoid holding Blobs in memory
+      const chunkMetadata: Array<{ duration: number; size: number }> = [];
       let generationMetadata: any = null;
+      const receivedChunkIndices = new Set<number>(); // Track received chunks for validation
 
       while (true) {
         const { done, value } = await reader.read();
@@ -144,11 +160,25 @@ export function useAudioGeneration({ book }: UseAudioGenerationProps): UseAudioG
             // NEW: Handle individual audio chunk
             console.log(`[useAudioGeneration] Received chunk ${data.index + 1}/${data.total}`);
 
+            // Validate chunk sequence integrity
+            if (receivedChunkIndices.has(data.index)) {
+              console.warn(`[useAudioGeneration] Duplicate chunk ${data.index} received, skipping`);
+              continue;
+            }
+
+            if (data.index !== receivedChunkIndices.size) {
+              const error = `Chunk sequence violation: expected index ${receivedChunkIndices.size}, got ${data.index}`;
+              console.error(`[useAudioGeneration] ${error}`);
+              throw new Error(error);
+            }
+
+            receivedChunkIndices.add(data.index);
+
             // Convert chunk base64 to Blob
             const chunkBlob = base64ToBlob(data.data, 'audio/mpeg');
 
             // Calculate startTime for this chunk (sum of previous chunk durations)
-            const startTime = chunks.reduce((sum, c) => sum + c.duration, 0);
+            const startTime = chunkMetadata.reduce((sum, c) => sum + c.duration, 0);
 
             // Create AudioFile metadata on first chunk
             if (data.index === 0) {
@@ -182,7 +212,8 @@ export function useAudioGeneration({ book }: UseAudioGenerationProps): UseAudioG
             };
 
             await saveChunkAndUpdateProgress(chunk, data.index + 1);
-            chunks.push(chunk);
+            // Store only metadata to avoid holding Blob in memory
+            chunkMetadata.push({ duration: data.estimatedDuration, size: chunkBlob.size });
 
             console.log(`[useAudioGeneration] Saved chunk ${data.index} to IndexedDB`);
 
@@ -198,7 +229,7 @@ export function useAudioGeneration({ book }: UseAudioGenerationProps): UseAudioG
 
             // Update audio file with final metadata
             if (audioFileId) {
-              const totalSizeBytes = chunks.reduce((sum, c) => sum + c.blob.size, 0);
+              const totalSizeBytes = chunkMetadata.reduce((sum, c) => sum + c.size, 0);
               await completeAudioFile(
                 audioFileId,
                 data.totalDuration,
@@ -215,7 +246,7 @@ export function useAudioGeneration({ book }: UseAudioGenerationProps): UseAudioG
       }
 
       // Validate we got all the data
-      if (!audioFileId || chunks.length === 0) {
+      if (!audioFileId || chunkMetadata.length === 0) {
         throw new Error('No chunks received from streaming API');
       }
 
@@ -277,7 +308,7 @@ export function useAudioGeneration({ book }: UseAudioGenerationProps): UseAudioG
         voice: voice,
         speed: speed,
         generatedAt: new Date(),
-        sizeBytes: chunks.reduce((sum, c) => sum + c.blob.size, 0),
+        sizeBytes: chunkMetadata.reduce((sum, c) => sum + c.size, 0),
         totalChunks: generationMetadata.totalChunks,
         chunksComplete: generationMetadata.totalChunks,
         isComplete: true,
@@ -289,6 +320,18 @@ export function useAudioGeneration({ book }: UseAudioGenerationProps): UseAudioG
     } catch (err: any) {
       if (err.name === 'AbortError' || err.message === 'Generation cancelled') {
         setError('Generation cancelled');
+
+        // Clean up partial generation
+        // TODO: Consider keeping partial chunks for resumption support (see code review)
+        if (audioFileId) {
+          console.log(`[useAudioGeneration] Cleaning up cancelled generation, audioFileId: ${audioFileId}`);
+          try {
+            await deleteAudioChunks(audioFileId);
+            await db.audioFiles.delete(audioFileId);
+          } catch (cleanupError) {
+            console.error('[useAudioGeneration] Failed to clean up cancelled generation:', cleanupError);
+          }
+        }
       } else {
         console.error('Audio generation error:', err);
         setError(err.message || 'Failed to generate audio');

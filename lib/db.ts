@@ -709,15 +709,26 @@ export async function saveChunkAndUpdateProgress(
   try {
     return await db.transaction('rw', db.audioChunks, db.audioFiles, async () => {
       // Save the chunk
-      const chunkId = await db.audioChunks.add(chunk);
+      let chunkId: number;
+      try {
+        chunkId = await db.audioChunks.add(chunk);
+      } catch (error) {
+        console.error(`[saveChunkAndUpdateProgress] Failed to add chunk ${chunk.chunkIndex}:`, error);
+        throw new Error(`Failed to save chunk ${chunk.chunkIndex} to database: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
 
       // Update the progress
-      await db.audioFiles.update(chunk.audioFileId, { chunksComplete });
+      try {
+        await db.audioFiles.update(chunk.audioFileId, { chunksComplete });
+      } catch (error) {
+        console.error(`[saveChunkAndUpdateProgress] Failed to update progress for audio ${chunk.audioFileId}:`, error);
+        throw new Error(`Failed to update audio file progress (audioFileId: ${chunk.audioFileId}): ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
 
       return chunkId;
     });
   } catch (error) {
-    console.error(`[saveChunkAndUpdateProgress] Failed to save chunk ${chunk.chunkIndex} and update progress for audio ${chunk.audioFileId}:`, error);
-    throw new Error(`Failed to save chunk and update progress atomically: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    // Transaction already rolled back by Dexie
+    throw error; // Re-throw with context from inner catch blocks
   }
 }

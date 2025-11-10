@@ -94,16 +94,23 @@ export async function POST(request: NextRequest) {
     // OpenAI TTS has a 4096 character limit - split into chunks if needed
     const MAX_CHARS = 4096;
     const chunks: string[] = [];
+    const chunkTextOffsets: { start: number; end: number }[] = [];
 
     if (sanitizedText.length <= MAX_CHARS) {
       chunks.push(sanitizedText);
+      chunkTextOffsets.push({ start: 0, end: sanitizedText.length });
     } else {
       console.log(`[TTS API Stream] Splitting chapter into chunks (${sanitizedText.length} chars)`);
       let remainingText = sanitizedText;
+      let currentOffset = 0;
 
       while (remainingText.length > 0) {
         if (remainingText.length <= MAX_CHARS) {
           chunks.push(remainingText);
+          chunkTextOffsets.push({
+            start: currentOffset,
+            end: currentOffset + remainingText.length,
+          });
           break;
         }
 
@@ -122,7 +129,16 @@ export async function POST(request: NextRequest) {
         }
 
         chunks.push(chunkText);
-        remainingText = remainingText.substring(chunkText.length).trim();
+        chunkTextOffsets.push({
+          start: currentOffset,
+          end: currentOffset + chunkText.length,
+        });
+
+        const beforeTrim = remainingText.substring(chunkText.length);
+        remainingText = beforeTrim.trim();
+        // Account for trimmed whitespace in offset tracking
+        const trimmedAmount = beforeTrim.length - remainingText.length;
+        currentOffset += chunkText.length + trimmedAmount;
       }
 
       console.log(`[TTS API Stream] Split into ${chunks.length} chunks`);
@@ -154,17 +170,7 @@ export async function POST(request: NextRequest) {
           });
 
           const audioBuffers: Buffer[] = [];
-          const chunkTextOffsets: { start: number; end: number }[] = [];
-
-          // Calculate text offsets for each chunk
-          let currentOffset = 0;
-          for (const chunk of chunks) {
-            chunkTextOffsets.push({
-              start: currentOffset,
-              end: currentOffset + chunk.length,
-            });
-            currentOffset += chunk.length;
-          }
+          // chunkTextOffsets already calculated during chunking (accounts for .trim())
 
           for (let i = 0; i < chunks.length; i++) {
             // Progress from 30% to 80% based on chunk completion
@@ -312,6 +318,10 @@ function isValidVoice(voice: string): voice is OpenAIVoice {
 /**
  * Estimate chunk duration based on text length and speed
  * Uses average reading speed of 150 words per minute
+ *
+ * TODO: Phase 3 should validate actual vs estimated durations (Phase 2 Code Review Issue #7)
+ * Compare Web Audio API audioBuffer.duration with estimatedDuration and log variance
+ * to refine the 150 wpm assumption for OpenAI TTS voices
  */
 function estimateChunkDuration(text: string, speed: number): number {
   const wordCount = text.split(/\s+/).length;
