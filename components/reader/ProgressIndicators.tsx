@@ -38,19 +38,21 @@ export default function ProgressIndicators({
         />
       </div>
 
-      {/* Progress Details (when controls are visible) */}
+      {/* Progress Details */}
       <div
         className={`
-          absolute bottom-4 left-1/2 transform -translate-x-1/2 z-20
+          absolute bottom-4 z-20
           bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm
-          px-4 py-2 rounded-full shadow-lg
+          shadow-lg
           transition-all duration-300
           ${showControls ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}
+          left-4 right-4 rounded-lg md:left-1/2 md:transform md:-translate-x-1/2 md:rounded-full md:left-auto md:right-auto
+          px-3 md:px-4 py-1.5 md:py-2
         `}
         role="status"
         aria-live="polite"
       >
-        <div className="flex items-center gap-4 text-sm text-gray-700 dark:text-gray-300">
+        <div className="flex items-center justify-between md:justify-center gap-2 md:gap-4 text-xs md:text-sm text-gray-700 dark:text-gray-300">
           {/* Progress Percentage */}
           <span className="font-medium" aria-label={`${Math.round(progress)} percent complete`}>
             {Math.round(progress)}%

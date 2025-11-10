@@ -33,7 +33,10 @@ export function useAudioGeneration({ book }: UseAudioGenerationProps): UseAudioG
     voice,
     speed = 1.0,
   }: GenerateAudioOptions): Promise<AudioFile | null> => {
+    console.log('[useAudioGeneration] Starting generation for chapter:', chapter.title);
+
     if (!book || !chapter.id) {
+      console.error('[useAudioGeneration] Invalid chapter or book', { book, chapterId: chapter.id });
       setError('Invalid chapter or book');
       return null;
     }
@@ -48,7 +51,9 @@ export function useAudioGeneration({ book }: UseAudioGenerationProps): UseAudioG
     try {
       // Step 1: Extract chapter text (10% -> 30%)
       setProgress(10);
+      console.log('[useAudioGeneration] Extracting chapter text...', { cfiStart: chapter.cfiStart, cfiEnd: chapter.cfiEnd });
       const chapterText = await getChapterText(book, chapter.cfiStart, chapter.cfiEnd);
+      console.log('[useAudioGeneration] Extracted text length:', chapterText.length);
 
       if (controller.signal.aborted) {
         throw new Error('Generation cancelled');
@@ -57,6 +62,7 @@ export function useAudioGeneration({ book }: UseAudioGenerationProps): UseAudioG
       setProgress(30);
 
       // Step 2: Call API (30% -> 80%)
+      console.log('[useAudioGeneration] Calling TTS API...', { voice, speed, textLength: chapterText.length });
       const response = await fetch('/api/tts/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -67,6 +73,7 @@ export function useAudioGeneration({ book }: UseAudioGenerationProps): UseAudioG
         }),
         signal: controller.signal,
       });
+      console.log('[useAudioGeneration] API response status:', response.status);
 
       if (!response.ok) {
         const errorData = await response.json();

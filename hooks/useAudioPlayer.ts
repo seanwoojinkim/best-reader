@@ -35,8 +35,9 @@ export function useAudioPlayer({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Initialize audio element
+  // Initialize audio element - only create once, never recreate
   useEffect(() => {
+    console.log('[useAudioPlayer] Initializing audio element');
     const audio = new Audio();
     audioRef.current = audio;
 
@@ -47,6 +48,7 @@ export function useAudioPlayer({
     };
 
     const handleLoadedMetadata = () => {
+      console.log('[useAudioPlayer] loadedmetadata event fired, duration:', audio.duration, 'src:', audio.src);
       setDuration(audio.duration);
       setLoading(false);
     };
@@ -69,42 +71,57 @@ export function useAudioPlayer({
     audio.addEventListener('error', handleError as any);
 
     return () => {
+      console.log('[useAudioPlayer] Cleaning up audio element');
       audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
       audio.removeEventListener('ended', handleEnded);
       audio.removeEventListener('error', handleError as any);
       audio.pause();
-      audio.src = '';
+      // Don't clear src here - keep it for potential reuse
+      // audio.src = '';
     };
-  }, [onTimeUpdate, onEnded]);
+  }, []);
 
   // Load chapter audio
   const loadChapter = useCallback(async (chapterToLoad: Chapter) => {
-    if (!chapterToLoad.id || !audioRef.current) return;
+    if (!chapterToLoad.id || !audioRef.current) {
+      console.log('[useAudioPlayer] loadChapter: Invalid chapter or audio ref');
+      return;
+    }
 
+    console.log('[useAudioPlayer] Loading chapter audio:', chapterToLoad.title, chapterToLoad.id);
     setLoading(true);
     setError(null);
+    setPlaying(false);
 
     try {
       const audioFile = await getAudioFile(chapterToLoad.id);
+      console.log('[useAudioPlayer] Audio file from DB:', audioFile ? 'found' : 'not found');
 
       if (!audioFile) {
         throw new Error('Audio not generated for this chapter');
       }
 
+      console.log('[useAudioPlayer] Audio blob size:', audioFile.blob.size, 'type:', audioFile.blob.type);
+
       // Create object URL from blob
       const audioUrl = URL.createObjectURL(audioFile.blob);
+      console.log('[useAudioPlayer] Object URL created:', audioUrl);
+
+      // Pause current playback before loading new audio
+      audioRef.current.pause();
       audioRef.current.src = audioUrl;
       audioRef.current.playbackRate = playbackSpeed;
 
-      // Clean up old object URL when new one is created
-      audioRef.current.addEventListener('loadstart', () => {
-        if (audioUrl) {
-          URL.revokeObjectURL(audioUrl);
-        }
-      }, { once: true });
+      console.log('[useAudioPlayer] Audio src set, calling load()');
+
+      // Wait for audio to load before marking as ready
+      audioRef.current.load();
+
+      // Don't revoke the object URL immediately - the audio element needs it!
+      // It will be cleaned up when the component unmounts or a new chapter loads
     } catch (err) {
-      console.error('Error loading chapter audio:', err);
+      console.error('[useAudioPlayer] Error loading chapter audio:', err);
       setError(err instanceof Error ? err.message : 'Failed to load audio');
       setLoading(false);
     }
@@ -118,10 +135,41 @@ export function useAudioPlayer({
   }, [chapter, loadChapter]);
 
   const play = useCallback(() => {
-    if (audioRef.current && !loading) {
-      audioRef.current.play();
-      setPlaying(true);
-      setError(null);
+    console.log('[useAudioPlayer] Play called', { hasAudio: !!audioRef.current, loading, src: audioRef.current?.src });
+
+    if (!audioRef.current) {
+      console.error('[useAudioPlayer] No audio element');
+      return;
+    }
+
+    if (loading) {
+      console.log('[useAudioPlayer] Still loading, cannot play yet');
+      return;
+    }
+
+    if (!audioRef.current.src) {
+      console.error('[useAudioPlayer] No audio source loaded');
+      setError('No audio loaded');
+      return;
+    }
+
+    const playPromise = audioRef.current.play();
+
+    if (playPromise !== undefined) {
+      playPromise
+        .then(() => {
+          console.log('[useAudioPlayer] Playback started successfully');
+          setPlaying(true);
+          setError(null);
+        })
+        .catch((err) => {
+          // Handle play() errors gracefully
+          if (err.name !== 'AbortError') {
+            console.error('[useAudioPlayer] Audio play error:', err);
+            setError('Failed to play audio');
+          }
+          setPlaying(false);
+        });
     }
   }, [loading]);
 

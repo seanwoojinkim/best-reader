@@ -192,20 +192,55 @@ export function estimateWordCount(text: string): number {
 
 /**
  * Extract text content from a chapter CFI range
+ * This extracts ALL content from cfiStart to cfiEnd (can span multiple spine items)
  */
 export async function getChapterText(
   book: EpubBook,
   cfiStart: string,
   cfiEnd: string
 ): Promise<string> {
-  const section = book.spine.get(cfiStart);
+  // Find the start and end spine indices
+  const startIndex = book.spine.items.findIndex((item: any) => {
+    return item.href === cfiStart ||
+           item.href.endsWith(cfiStart) ||
+           item.href.includes(cfiStart);
+  });
 
-  if (!section) {
-    throw new Error('Chapter not found');
+  const endIndex = book.spine.items.findIndex((item: any) => {
+    return item.href === cfiEnd ||
+           item.href.endsWith(cfiEnd) ||
+           item.href.includes(cfiEnd);
+  });
+
+  if (startIndex === -1) {
+    console.error('[getChapterText] Start chapter not found:', cfiStart);
+    console.error('Available spine items:', book.spine.items.map((item: any) => item.href));
+    throw new Error(`Chapter not found: ${cfiStart}`);
   }
 
-  const contents = await section.load(book.load.bind(book));
-  return contents.textContent || '';
+  // If endIndex not found or same as start, just get one section
+  const actualEndIndex = endIndex === -1 ? startIndex : endIndex;
+
+  console.log(`[getChapterText] Extracting from spine index ${startIndex} to ${actualEndIndex}`);
+
+  // Extract text from all sections in the range (inclusive)
+  let fullText = '';
+  for (let i = startIndex; i <= actualEndIndex; i++) {
+    const section = book.spine.get(i);
+    if (section) {
+      try {
+        const contents = await section.load(book.load.bind(book));
+        const text = contents.textContent || '';
+        fullText += text + '\n\n';
+        console.log(`[getChapterText] Section ${i}: ${text.length} characters`);
+      } catch (error) {
+        console.error(`[getChapterText] Error loading section ${i}:`, error);
+      }
+    }
+  }
+
+  console.log(`[getChapterText] Total extracted: ${fullText.length} characters`);
+  return fullText.trim();
 }
 
 /**

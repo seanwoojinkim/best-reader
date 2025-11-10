@@ -128,10 +128,16 @@ export function useEpubReader({
 
     const generateLocations = async () => {
       try {
+        console.log('[useEpubReader] Waiting for book to be ready...');
+        // Wait for book to be ready before generating locations
+        await book.ready;
+
+        console.log('[useEpubReader] Book ready, generating locations...');
         const locs = await book.locations.generate(1600); // Average chars per page
+        console.log('[useEpubReader] Locations generated:', locs.length, locs);
         setTotalLocations(locs.length || 0);
       } catch (error) {
-        console.error('Error generating locations:', error);
+        console.error('[useEpubReader] Error generating locations:', error);
       }
     };
 
@@ -148,7 +154,17 @@ export function useEpubReader({
 
       // Calculate progress percentage
       const percentage = book?.locations?.percentageFromCfi(cfi) || 0;
-      setProgress(Math.round(percentage * 100));
+      const progressPercent = Math.round(percentage * 100);
+
+      console.log('[useEpubReader] Location changed:', {
+        cfi: cfi.substring(0, 50) + '...',
+        percentage,
+        progressPercent,
+        hasLocations: !!book?.locations,
+        totalLocations: book?.locations?.length()
+      });
+
+      setProgress(progressPercent);
 
       onLocationChange?.(cfi, percentage);
     };

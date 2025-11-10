@@ -263,7 +263,7 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
 
   return (
     <div className="relative h-screen w-screen overflow-hidden">
-      {/* Controls Bar */}
+      {/* Controls Bar - Toggleable on all devices */}
       <div
         className={`
           absolute top-0 left-0 right-0 z-10 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm border-b border-gray-200 dark:border-gray-700
@@ -280,11 +280,11 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
               ← Library
             </a>
 
-            <div className="flex items-center gap-4">
-              {/* AI Recap Button */}
+            <div className="flex items-center gap-2 md:gap-4">
+              {/* AI Recap Button - Icon only on mobile */}
               <button
                 onClick={() => setShowAiRecap(true)}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950 hover:bg-sky-100 dark:hover:bg-sky-900 rounded transition-colors border border-sky-200 dark:border-sky-800"
+                className="flex items-center gap-2 px-2 md:px-3 py-1.5 text-sm font-medium text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950 hover:bg-sky-100 dark:hover:bg-sky-900 rounded transition-colors border border-sky-200 dark:border-sky-800"
                 title="AI Recap"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -295,13 +295,13 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
                     d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
                   />
                 </svg>
-                AI Recap
+                <span className="hidden md:inline">AI Recap</span>
               </button>
 
-              {/* AI Chapter Summary Button */}
+              {/* AI Chapter Summary Button - Icon only on mobile */}
               <button
                 onClick={() => setShowAiChapterSummary(true)}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950 hover:bg-sky-100 dark:hover:bg-sky-900 rounded transition-colors border border-sky-200 dark:border-sky-800"
+                className="flex items-center gap-2 px-2 md:px-3 py-1.5 text-sm font-medium text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950 hover:bg-sky-100 dark:hover:bg-sky-900 rounded transition-colors border border-sky-200 dark:border-sky-800"
                 title="Summarize Chapter"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -312,12 +312,13 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
                     d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
                   />
                 </svg>
-                Summarize
+                <span className="hidden md:inline">Summarize</span>
               </button>
 
+              {/* Hide on mobile - access via menu */}
               <a
                 href="/highlights"
-                className="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
+                className="hidden md:inline text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
               >
                 Highlights
               </a>
@@ -327,7 +328,8 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
                 onClick={() => setShowChapterList(!showChapterList)}
                 className="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
               >
-                Chapters
+                <span className="hidden md:inline">Chapters</span>
+                <span className="md:hidden">📑</span>
               </button>
 
               <button
@@ -361,7 +363,7 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
       </div>
 
       {/* Settings Drawer */}
-      <SettingsDrawer isOpen={showSettings} onClose={() => setShowSettings(false)} />
+      <SettingsDrawer isOpen={showSettings} onClose={() => setShowSettings(false)} bookId={bookId} />
 
       {/* Chapter List Modal (TTS Phase 3) */}
       {showChapterList && (
@@ -370,7 +372,7 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
             className="fixed inset-0 bg-black/50 z-40"
             onClick={() => setShowChapterList(false)}
           />
-          <div className="fixed left-0 top-0 bottom-0 w-80 bg-white dark:bg-gray-900 shadow-xl z-50 overflow-y-auto">
+          <div className="fixed left-0 top-0 bottom-0 w-full md:w-80 bg-white dark:bg-gray-900 shadow-xl z-50 overflow-y-auto">
             <div className="sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 p-4 flex items-center justify-between">
               <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Chapters</h2>
               <button
