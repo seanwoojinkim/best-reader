@@ -114,6 +114,12 @@ export function useAudioPlayer({
         throw new Error('Audio not generated for this chapter');
       }
 
+      // For Phase 1: Only single-blob mode is supported in player
+      // Progressive streaming player will be implemented in later phases
+      if (!audioFile.blob) {
+        throw new Error('Audio file uses progressive streaming (not yet supported in player)');
+      }
+
       console.log('[useAudioPlayer] Audio blob size:', audioFile.blob.size, 'type:', audioFile.blob.type);
 
       // Revoke previous object URL to prevent memory leak
