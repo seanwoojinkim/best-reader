@@ -18,6 +18,13 @@ interface AudioPlayerProps {
   onClose: () => void;
   syncEnabled?: boolean;
   onToggleSync?: () => void;
+
+  // Progressive streaming fields (Phase 4)
+  isProgressive?: boolean;
+  chunksLoaded?: number;
+  totalChunks?: number;
+  isGenerating?: boolean;
+  error?: string | null;
 }
 
 const PLAYBACK_SPEEDS = [0.75, 1.0, 1.25, 1.5, 2.0];
@@ -36,6 +43,11 @@ export default function AudioPlayer({
   onClose,
   syncEnabled = true,
   onToggleSync,
+  isProgressive = false,
+  chunksLoaded = 0,
+  totalChunks = 0,
+  isGenerating = false,
+  error = null,
 }: AudioPlayerProps) {
   const [seeking, setSeeking] = useState(false);
   const [tempSeekTime, setTempSeekTime] = useState(0);
@@ -78,30 +90,66 @@ export default function AudioPlayer({
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-30 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 shadow-lg">
+      {/* Error Banner */}
+      {error && (
+        <div className="bg-red-100 dark:bg-red-900 border-b border-red-200 dark:border-red-800">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="text-sm text-red-800 dark:text-red-200">{error}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
         {/* Progress Bar */}
-        <div
-          className="relative h-1 bg-gray-200 dark:bg-gray-700 rounded-full cursor-pointer mb-3"
-          onMouseDown={handleSeekStart}
-          onMouseMove={handleSeekMove}
-          onMouseUp={handleSeekEnd}
-          onMouseLeave={handleSeekEnd}
-          role="slider"
-          aria-label="Audio progress"
-          aria-valuenow={Math.round(progress)}
-          aria-valuemin={0}
-          aria-valuemax={100}
-        >
+        <div className="relative mb-3">
           <div
-            className="absolute h-full bg-sky-600 dark:bg-sky-400 rounded-full transition-all"
-            style={{ width: `${progress}%` }}
-          />
-          {/* Seek Handle */}
-          {duration > 0 && (
+            className="relative h-1 bg-gray-200 dark:bg-gray-700 rounded-full cursor-pointer"
+            onMouseDown={isGenerating ? undefined : handleSeekStart}
+            onMouseMove={isGenerating ? undefined : handleSeekMove}
+            onMouseUp={isGenerating ? undefined : handleSeekEnd}
+            onMouseLeave={isGenerating ? undefined : handleSeekEnd}
+            role="slider"
+            aria-label="Audio progress"
+            aria-valuenow={Math.round(progress)}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-disabled={isGenerating}
+          >
+            {/* Generation Progress (behind playback progress) */}
+            {isGenerating && totalChunks > 0 && (
+              <div
+                className="absolute h-full bg-sky-300 dark:bg-sky-700 rounded-full transition-all"
+                style={{ width: `${(chunksLoaded / totalChunks) * 100}%` }}
+              />
+            )}
+
+            {/* Playback Progress */}
             <div
-              className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-sky-600 dark:bg-sky-400 rounded-full shadow-md"
-              style={{ left: `${progress}%`, marginLeft: '-6px' }}
+              className="absolute h-full bg-sky-600 dark:bg-sky-400 rounded-full transition-all"
+              style={{ width: `${progress}%` }}
             />
+
+            {/* Seek Handle */}
+            {duration > 0 && !isGenerating && (
+              <div
+                className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-sky-600 dark:bg-sky-400 rounded-full shadow-md"
+                style={{ left: `${progress}%`, marginLeft: '-6px' }}
+              />
+            )}
+          </div>
+
+          {/* Seeking disabled tooltip */}
+          {isGenerating && (
+            <div className="absolute -top-8 left-1/2 -translate-x-1/2 px-3 py-1 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
+              Seeking available after generation completes
+            </div>
           )}
         </div>
 
@@ -125,6 +173,24 @@ export default function AudioPlayer({
               <p className="text-xs text-gray-500 dark:text-gray-400">
                 {formatDuration(displayTime)} / {formatDuration(duration)}
               </p>
+
+              {/* Progressive Streaming Status */}
+              {isProgressive && totalChunks > 1 && (
+                <p className="text-xs text-gray-400 dark:text-gray-500">
+                  {isGenerating ? (
+                    <>
+                      Playing chunk {Math.min(chunksLoaded, totalChunks)}/{totalChunks}
+                      {chunksLoaded < totalChunks && (
+                        <span className="ml-1 text-sky-600 dark:text-sky-400">
+                          • Generating {chunksLoaded + 1}/{totalChunks}
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    `${totalChunks} chunks loaded`
+                  )}
+                </p>
+              )}
             </div>
           </div>
 

@@ -22,6 +22,7 @@ interface UseProgressiveAudioPlayerResult {
   chunksLoaded: number;
   totalChunks: number;
   isGenerating: boolean;
+  playbackSpeed: number;
   play: () => Promise<void>;
   pause: () => void;
   seek: (time: number) => void;
@@ -53,6 +54,7 @@ export function useProgressiveAudioPlayer({
   const [duration, setDuration] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
 
   // Chunk tracking
   const [chunksLoaded, setChunksLoaded] = useState(0);
@@ -491,6 +493,8 @@ export function useProgressiveAudioPlayer({
 
     console.log(`[useProgressiveAudioPlayer] Setting playback speed to ${validSpeed}x`);
 
+    setPlaybackSpeed(validSpeed);
+
     scheduledChunksRef.current.forEach(scheduled => {
       scheduled.source.playbackRate.value = validSpeed;
     });
@@ -542,6 +546,7 @@ export function useProgressiveAudioPlayer({
     chunksLoaded,
     totalChunks,
     isGenerating,
+    playbackSpeed,
     play,
     pause,
     seek,
