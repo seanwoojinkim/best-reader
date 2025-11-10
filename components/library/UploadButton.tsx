@@ -45,6 +45,7 @@ export default function UploadButton({ onUploadComplete }: UploadButtonProps) {
         author: metadata.author,
         filePath: '', // Will store blob directly
         coverUrl: metadata.coverUrl,
+        coverBlob: metadata.coverBlob,
         fileBlob: blob,
       });
 

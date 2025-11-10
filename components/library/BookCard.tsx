@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { Book } from '@/types';
 
@@ -9,16 +9,34 @@ interface BookCardProps {
 }
 
 export default function BookCard({ book }: BookCardProps) {
+  const [coverUrl, setCoverUrl] = useState<string | undefined>(book.coverUrl);
+
+  useEffect(() => {
+    // If we have a coverBlob but no valid coverUrl (or it's a stale blob URL), create a new one
+    if (book.coverBlob && (!book.coverUrl || book.coverUrl.startsWith('blob:'))) {
+      const url = URL.createObjectURL(book.coverBlob);
+      setCoverUrl(url);
+
+      // Cleanup on unmount
+      return () => {
+        URL.revokeObjectURL(url);
+      };
+    } else if (book.coverUrl && !book.coverUrl.startsWith('blob:')) {
+      // If coverUrl is a regular URL (not a blob URL), use it directly
+      setCoverUrl(book.coverUrl);
+    }
+  }, [book.coverBlob, book.coverUrl]);
+
   return (
     <Link
       href={`/reader/${book.id}`}
       className="group block transition-transform duration-200 hover:scale-105"
     >
       <div className="relative aspect-[2/3] bg-gray-100 rounded-lg overflow-hidden shadow-md mb-3">
-        {book.coverUrl ? (
+        {coverUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={book.coverUrl}
+            src={coverUrl}
             alt={`Cover of ${book.title}`}
             className="w-full h-full object-cover"
           />

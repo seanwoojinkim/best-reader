@@ -5,6 +5,7 @@ export interface Book {
   author: string;
   filePath: string; // Blob URL or IndexedDB reference
   coverUrl?: string;
+  coverBlob?: Blob; // Store the actual cover image data
   isbn?: string;
   tags?: string[];
   addedAt: Date;

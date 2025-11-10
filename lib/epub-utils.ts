@@ -21,6 +21,7 @@ export async function extractEpubMetadata(file: File): Promise<{
   title: string;
   author: string;
   coverUrl?: string;
+  coverBlob?: Blob;
 }> {
   try {
     const arrayBuffer = await file.arrayBuffer();
@@ -36,10 +37,20 @@ export async function extractEpubMetadata(file: File): Promise<{
 
     // Extract cover image with timeout
     let coverUrl: string | undefined;
+    let coverBlob: Blob | undefined;
     try {
       const cover = await withTimeout(book.coverUrl(), 5000);
       if (cover) {
-        coverUrl = cover;
+        // Fetch the blob URL and convert to actual Blob for storage
+        try {
+          const response = await fetch(cover);
+          coverBlob = await response.blob();
+          coverUrl = cover; // Keep the temporary URL for immediate display
+          console.log('[epub-utils] Cover image fetched and stored as blob:', coverBlob.size, 'bytes');
+        } catch (fetchError) {
+          console.warn('Could not fetch cover blob:', fetchError);
+          coverUrl = cover; // Still use the URL even if blob fetch fails
+        }
       }
     } catch (e) {
       console.warn('Could not extract cover:', e);
@@ -49,6 +60,7 @@ export async function extractEpubMetadata(file: File): Promise<{
       title,
       author,
       coverUrl,
+      coverBlob,
     };
   } catch (error) {
     console.error('Error extracting EPUB metadata:', error);
