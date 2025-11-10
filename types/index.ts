@@ -90,12 +90,19 @@ export interface Chapter {
 export interface AudioFile {
   id?: number;
   chapterId: number;
-  blob: Blob;         // MP3 audio data
+  blob?: Blob;        // MP3 audio data (optional for progressive streaming)
   duration: number;   // Seconds
   voice: OpenAIVoice;
   speed: number;
   generatedAt: Date;
   sizeBytes: number;
+
+  // Progressive streaming fields
+  totalChunks?: number;      // Expected number of chunks
+  chunksComplete?: number;   // Chunks successfully generated
+  isComplete?: boolean;      // Generation finished
+  completedAt?: Date;        // When all chunks finished
+  isProgressive?: boolean;   // true = chunk-based, false/undefined = single-blob
 }
 
 // Audio settings per book
@@ -143,4 +150,21 @@ export interface SentenceSyncData {
   sentences: SentenceMetadata[];
   generatedAt: Date;
   version: number;            // Schema version for migrations
+}
+
+// ============================================================
+// Progressive Audio Streaming Interfaces (TTS Phase: Progressive Streaming)
+// ============================================================
+
+// Audio chunk for progressive streaming
+export interface AudioChunk {
+  id?: number;
+  audioFileId: number;      // FK to audioFiles table
+  chunkIndex: number;        // 0-based position in sequence
+  blob: Blob;                // Individual MP3 chunk
+  duration: number;          // Chunk duration in seconds
+  textStart: number;         // Character offset in chapter text
+  textEnd: number;           // Character end offset
+  startTime: number;         // Offset in final concatenated audio (seconds)
+  generatedAt: Date;
 }

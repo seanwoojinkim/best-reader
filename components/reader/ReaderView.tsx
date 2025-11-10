@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { flushSync } from 'react-dom';
 import dynamic from 'next/dynamic';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { savePosition, getAudioFile, getSentenceSyncData } from '@/lib/db';
@@ -10,6 +11,7 @@ import { useSession } from '@/hooks/useSession';
 import { useReadingStats } from '@/hooks/useReadingStats';
 import { useChapters } from '@/hooks/useChapters';
 import { useAudioPlayer } from '@/hooks/useAudioPlayer';
+import { useProgressiveAudioPlayer } from '@/hooks/useProgressiveAudioPlayer';
 import { useAudioGeneration } from '@/hooks/useAudioGeneration';
 import { useSentenceSync } from '@/hooks/useSentenceSync';
 import { getAudioSettings, getDefaultAudioSettings } from '@/lib/db';
@@ -176,25 +178,52 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
     }
   }, [sentenceSyncData, currentAudioChapter]);
 
-  // Audio playback (TTS Phase 3, Phase 4: with sync)
-  const audioPlayer = useAudioPlayer({
-    chapter: currentAudioChapter,
-    onTimeUpdate: async (currentTime, duration) => {
-      // TTS Phase 4: Sync audio → reading position (every 5 seconds to avoid excessive updates)
-      const now = Date.now();
-      if (syncEnabled && currentAudioChapter && book && now - lastSyncTimeRef.current > 5000) {
-        const cfi = await timestampToCFI(book, currentAudioChapter, currentTime, duration);
-        if (cfi && goToLocation) {
-          goToLocation(cfi);
-          lastSyncTimeRef.current = now;
-        }
+  // Progressive audio state (Phase 4)
+  const [isProgressiveAudio, setIsProgressiveAudio] = useState(false);
+
+  // Common audio callbacks
+  const handleAudioTimeUpdate = useCallback(async (currentTime: number, duration: number) => {
+    // TTS Phase 4: Sync audio → reading position (every 5 seconds to avoid excessive updates)
+    const now = Date.now();
+    if (syncEnabled && currentAudioChapter && book && now - lastSyncTimeRef.current > 5000) {
+      const cfi = await timestampToCFI(book, currentAudioChapter, currentTime, duration);
+      if (cfi && goToLocation) {
+        goToLocation(cfi);
+        lastSyncTimeRef.current = now;
       }
-    },
-    onEnded: () => {
-      setCurrentAudioChapter(null);
-      trackListeningTime(false); // Stop tracking listening time
-    },
+    }
+  }, [syncEnabled, currentAudioChapter, book, goToLocation]);
+
+  const handleAudioEnded = useCallback(() => {
+    setCurrentAudioChapter(null);
+    trackListeningTime(false); // Stop tracking listening time
+  }, [trackListeningTime]);
+
+  // Smart player selection: use progressive player for chunk-based audio, standard for single-blob
+  const standardAudioPlayer = useAudioPlayer({
+    chapter: !isProgressiveAudio ? currentAudioChapter : null,
+    onTimeUpdate: handleAudioTimeUpdate,
+    onEnded: handleAudioEnded,
   });
+
+  const progressiveAudioPlayer = useProgressiveAudioPlayer({
+    chapter: isProgressiveAudio ? currentAudioChapter : null,
+    onTimeUpdate: handleAudioTimeUpdate,
+    onEnded: handleAudioEnded,
+  });
+
+  // Use the appropriate player based on audio type
+  const audioPlayer = isProgressiveAudio ? progressiveAudioPlayer : standardAudioPlayer;
+
+  // Phase 4: Auto-play progressive audio after first chunk loads
+  useEffect(() => {
+    if (isProgressiveAudio && progressiveAudioPlayer.chunksLoaded === 1 && !progressiveAudioPlayer.playing && !progressiveAudioPlayer.loading) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[ReaderView Phase 4] Auto-playing progressive audio after first chunk loaded');
+      }
+      progressiveAudioPlayer.play();
+    }
+  }, [isProgressiveAudio, progressiveAudioPlayer.chunksLoaded, progressiveAudioPlayer.playing, progressiveAudioPlayer.loading]);
 
   // Audio generation (TTS Phase 3) - Support multiple concurrent generations
   const audioGeneration = useAudioGeneration({ book });
@@ -505,6 +534,26 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
                         return next;
                       });
                     },
+                    // Phase 4: Auto-play after first chunk ready
+                    onFirstChunkReady: async (chapterId, audioFileId) => {
+                      if (process.env.NODE_ENV === 'development') {
+                        console.log('[ReaderView Phase 4] First chunk ready, starting progressive playback', {
+                          chapterId,
+                          audioFileId,
+                        });
+                      }
+
+                      // Switch to progressive player
+                      setIsProgressiveAudio(true);
+
+                      // Set current audio chapter to trigger progressive player load
+                      setCurrentAudioChapter(chapter);
+
+                      // Navigate to chapter if not already there
+                      if (goToLocation && chapter.cfiStart) {
+                        goToLocation(chapter.cfiStart);
+                      }
+                    },
                   });
 
                   if (result) {
@@ -512,6 +561,8 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
                   }
                 } catch (error) {
                   console.error('[TTS Phase 3] Audio generation error:', error);
+                  // Reset progressive flag on error to prevent wrong player selection on retry
+                  setIsProgressiveAudio(false);
                 } finally {
                   // Always cleanup, even on error - CRITICAL FIX
                   setGeneratingChapters(prev => {
@@ -521,13 +572,27 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
                   });
                 }
               }}
-              onPlayAudio={(chapter) => {
+              onPlayAudio={async (chapter) => {
                 console.log('[ReaderView] Play audio clicked for chapter:', {
                   title: chapter.title,
                   cfiStart: chapter.cfiStart,
                   hasGoToLocation: !!goToLocation,
                   hasBook: !!book
                 });
+
+                // Phase 4: Detect if audio is progressive or single-blob
+                if (chapter.id) {
+                  const audioFile = await getAudioFile(chapter.id);
+                  if (audioFile) {
+                    // Use flushSync to ensure state update happens before setCurrentAudioChapter
+                    flushSync(() => {
+                      setIsProgressiveAudio(audioFile.isProgressive || false);
+                    });
+                    if (process.env.NODE_ENV === 'development') {
+                      console.log('[ReaderView Phase 4] Audio type:', audioFile.isProgressive ? 'progressive' : 'single-blob');
+                    }
+                  }
+                }
 
                 setCurrentAudioChapter(chapter);
 
@@ -592,7 +657,7 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
         />
       )}
 
-      {/* Audio Player (TTS Phase 3) */}
+      {/* Audio Player (TTS Phase 3, Phase 4: Progressive Streaming) */}
       {currentAudioChapter && (
         <AudioPlayer
           chapter={currentAudioChapter}
@@ -605,9 +670,18 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
           onPause={audioPlayer.pause}
           onSeek={audioPlayer.seek}
           onSpeedChange={audioPlayer.setSpeed}
-          onClose={() => setCurrentAudioChapter(null)}
+          onClose={() => {
+            setCurrentAudioChapter(null);
+            setIsProgressiveAudio(false); // Reset progressive state on close
+          }}
           syncEnabled={syncEnabled}
           onToggleSync={() => setSyncEnabled(!syncEnabled)}
+          isProgressive={isProgressiveAudio}
+          chunksLoaded={isProgressiveAudio ? progressiveAudioPlayer.chunksLoaded : 0}
+          totalChunks={isProgressiveAudio ? progressiveAudioPlayer.totalChunks : 0}
+          currentPlayingChunk={isProgressiveAudio ? progressiveAudioPlayer.currentPlayingChunk : 0}
+          isGenerating={isProgressiveAudio ? progressiveAudioPlayer.isGenerating : false}
+          error={audioPlayer.error || null}
         />
       )}
 

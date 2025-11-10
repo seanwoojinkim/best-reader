@@ -1,5 +1,5 @@
 import Dexie, { Table } from 'dexie';
-import type { Book, ReadingPosition, Session, Highlight, Analytics, Chapter, AudioFile, AudioSettings, AudioUsage, SentenceSyncData } from '@/types';
+import type { Book, ReadingPosition, Session, Highlight, Analytics, Chapter, AudioFile, AudioSettings, AudioUsage, SentenceSyncData, AudioChunk } from '@/types';
 
 export class ReaderDatabase extends Dexie {
   books!: Table<Book, number>;
@@ -12,6 +12,7 @@ export class ReaderDatabase extends Dexie {
   audioSettings!: Table<AudioSettings, number>;
   audioUsage!: Table<AudioUsage, number>;
   sentenceSyncData!: Table<SentenceSyncData, number>;
+  audioChunks!: Table<AudioChunk, number>;
 
   constructor() {
     super('AdaptiveReaderDB');
@@ -57,6 +58,21 @@ export class ReaderDatabase extends Dexie {
       audioSettings: 'bookId, updatedAt',
       audioUsage: '++id, chapterId, bookId, timestamp',
       sentenceSyncData: '++id, audioFileId, chapterId, generatedAt',
+    });
+
+    // Version 5: Add progressive audio streaming support (TTS Phase: Progressive Streaming)
+    this.version(5).stores({
+      books: '++id, title, author, addedAt, lastOpenedAt, *tags',
+      positions: 'bookId, updatedAt',
+      sessions: '++id, bookId, startTime, endTime',
+      highlights: '++id, bookId, cfiRange, color, createdAt',
+      analytics: '++id, sessionId, bookId, timestamp, event',
+      chapters: '++id, bookId, order, cfiStart',
+      audioFiles: '++id, chapterId, generatedAt',
+      audioSettings: 'bookId, updatedAt',
+      audioUsage: '++id, chapterId, bookId, timestamp',
+      sentenceSyncData: '++id, audioFileId, chapterId, generatedAt',
+      audioChunks: '++id, audioFileId, [audioFileId+chunkIndex], chunkIndex, generatedAt',
     });
   }
 }
@@ -178,6 +194,7 @@ export async function clearAllData(): Promise<void> {
   await db.audioSettings.clear();
   await db.audioUsage.clear();
   await db.sentenceSyncData.clear();
+  await db.audioChunks.clear();
 }
 
 // ============================================================
@@ -411,6 +428,7 @@ export async function deleteAudioFile(chapterId: number): Promise<void> {
   const audioFile = await getAudioFile(chapterId);
   if (audioFile?.id) {
     await deleteSentenceSyncData(audioFile.id);
+    await deleteAudioChunks(audioFile.id);
   }
   await db.audioFiles.where('chapterId').equals(chapterId).delete();
 }
@@ -527,4 +545,190 @@ export async function deleteSentenceSyncData(
     .where('audioFileId')
     .equals(audioFileId)
     .delete();
+}
+
+// ============================================================
+// Audio Chunk Management Functions (TTS Phase: Progressive Streaming)
+// ============================================================
+
+/**
+ * Save an audio chunk to IndexedDB
+ */
+export async function saveAudioChunk(
+  chunk: Omit<AudioChunk, 'id'>
+): Promise<number> {
+  try {
+    return await db.audioChunks.add(chunk);
+  } catch (error) {
+    console.error(`[saveAudioChunk] Failed to save chunk ${chunk.chunkIndex} for audio ${chunk.audioFileId}:`, error);
+    throw new Error(`Failed to save audio chunk: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Save multiple audio chunks in a single transaction (more efficient)
+ */
+export async function saveAudioChunks(
+  chunks: Omit<AudioChunk, 'id'>[]
+): Promise<number[]> {
+  try {
+    return await db.audioChunks.bulkAdd(chunks, { allKeys: true });
+  } catch (error) {
+    console.error(`[saveAudioChunks] Failed to save ${chunks.length} chunks:`, error);
+    throw new Error(`Failed to save audio chunks in bulk: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Get all audio chunks for an audio file, sorted by chunk index
+ */
+export async function getAudioChunks(
+  audioFileId: number
+): Promise<AudioChunk[]> {
+  try {
+    return await db.audioChunks
+      .where('audioFileId')
+      .equals(audioFileId)
+      .sortBy('chunkIndex');
+  } catch (error) {
+    console.error(`[getAudioChunks] Failed to get chunks for audio ${audioFileId}:`, error);
+    throw new Error(`Failed to retrieve audio chunks: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Get a specific audio chunk by audio file ID and chunk index
+ */
+export async function getAudioChunk(
+  audioFileId: number,
+  chunkIndex: number
+): Promise<AudioChunk | undefined> {
+  try {
+    return await db.audioChunks
+      .where({ audioFileId, chunkIndex })
+      .first();
+  } catch (error) {
+    console.error(`[getAudioChunk] Failed to get chunk ${chunkIndex} for audio ${audioFileId}:`, error);
+    throw new Error(`Failed to retrieve audio chunk: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Get chunks in a specific range (for sliding window memory management)
+ */
+export async function getAudioChunksInRange(
+  audioFileId: number,
+  startIndex: number,
+  endIndex: number
+): Promise<AudioChunk[]> {
+  try {
+    // Use IndexedDB query for efficient filtering instead of loading all chunks
+    return await db.audioChunks
+      .where('audioFileId')
+      .equals(audioFileId)
+      .and(chunk => chunk.chunkIndex >= startIndex && chunk.chunkIndex <= endIndex)
+      .sortBy('chunkIndex');
+  } catch (error) {
+    console.error(`[getAudioChunksInRange] Failed to get chunks ${startIndex}-${endIndex} for audio ${audioFileId}:`, error);
+    throw new Error(`Failed to retrieve audio chunks in range: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Update audio file progress (chunksComplete count)
+ */
+export async function updateAudioFileProgress(
+  audioFileId: number,
+  chunksComplete: number
+): Promise<void> {
+  try {
+    await db.audioFiles.update(audioFileId, { chunksComplete });
+  } catch (error) {
+    console.error(`[updateAudioFileProgress] Failed to update progress for audio ${audioFileId}:`, error);
+    throw new Error(`Failed to update audio file progress: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Mark audio file as complete after all chunks generated
+ */
+export async function completeAudioFile(
+  audioFileId: number,
+  totalDuration: number,
+  totalSizeBytes: number
+): Promise<void> {
+  try {
+    await db.audioFiles.update(audioFileId, {
+      isComplete: true,
+      completedAt: new Date(),
+      duration: totalDuration,
+      sizeBytes: totalSizeBytes,
+    });
+  } catch (error) {
+    console.error(`[completeAudioFile] Failed to mark audio ${audioFileId} as complete:`, error);
+    throw new Error(`Failed to complete audio file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Delete all chunks for an audio file (cleanup)
+ */
+export async function deleteAudioChunks(
+  audioFileId: number
+): Promise<void> {
+  try {
+    await db.audioChunks.where('audioFileId').equals(audioFileId).delete();
+  } catch (error) {
+    console.error(`[deleteAudioChunks] Failed to delete chunks for audio ${audioFileId}:`, error);
+    throw new Error(`Failed to delete audio chunks: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Get chunk count for an audio file
+ */
+export async function getAudioChunkCount(
+  audioFileId: number
+): Promise<number> {
+  try {
+    return await db.audioChunks.where('audioFileId').equals(audioFileId).count();
+  } catch (error) {
+    console.error(`[getAudioChunkCount] Failed to count chunks for audio ${audioFileId}:`, error);
+    throw new Error(`Failed to get audio chunk count: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Save a chunk and update audio file progress atomically
+ * This prevents inconsistent state if one operation fails
+ */
+export async function saveChunkAndUpdateProgress(
+  chunk: Omit<AudioChunk, 'id'>,
+  chunksComplete: number
+): Promise<number> {
+  try {
+    return await db.transaction('rw', db.audioChunks, db.audioFiles, async () => {
+      // Save the chunk
+      let chunkId: number;
+      try {
+        chunkId = await db.audioChunks.add(chunk);
+      } catch (error) {
+        console.error(`[saveChunkAndUpdateProgress] Failed to add chunk ${chunk.chunkIndex}:`, error);
+        throw new Error(`Failed to save chunk ${chunk.chunkIndex} to database: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+
+      // Update the progress
+      try {
+        await db.audioFiles.update(chunk.audioFileId, { chunksComplete });
+      } catch (error) {
+        console.error(`[saveChunkAndUpdateProgress] Failed to update progress for audio ${chunk.audioFileId}:`, error);
+        throw new Error(`Failed to update audio file progress (audioFileId: ${chunk.audioFileId}): ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+
+      return chunkId;
+    });
+  } catch (error) {
+    // Transaction already rolled back by Dexie
+    throw error; // Re-throw with context from inner catch blocks
+  }
 }

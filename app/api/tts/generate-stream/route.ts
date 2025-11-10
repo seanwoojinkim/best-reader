@@ -94,16 +94,23 @@ export async function POST(request: NextRequest) {
     // OpenAI TTS has a 4096 character limit - split into chunks if needed
     const MAX_CHARS = 4096;
     const chunks: string[] = [];
+    const chunkTextOffsets: { start: number; end: number }[] = [];
 
     if (sanitizedText.length <= MAX_CHARS) {
       chunks.push(sanitizedText);
+      chunkTextOffsets.push({ start: 0, end: sanitizedText.length });
     } else {
       console.log(`[TTS API Stream] Splitting chapter into chunks (${sanitizedText.length} chars)`);
       let remainingText = sanitizedText;
+      let currentOffset = 0;
 
       while (remainingText.length > 0) {
         if (remainingText.length <= MAX_CHARS) {
           chunks.push(remainingText);
+          chunkTextOffsets.push({
+            start: currentOffset,
+            end: currentOffset + remainingText.length,
+          });
           break;
         }
 
@@ -122,7 +129,16 @@ export async function POST(request: NextRequest) {
         }
 
         chunks.push(chunkText);
-        remainingText = remainingText.substring(chunkText.length).trim();
+        chunkTextOffsets.push({
+          start: currentOffset,
+          end: currentOffset + chunkText.length,
+        });
+
+        const beforeTrim = remainingText.substring(chunkText.length);
+        remainingText = beforeTrim.trim();
+        // Account for trimmed whitespace in offset tracking
+        const trimmedAmount = beforeTrim.length - remainingText.length;
+        currentOffset += chunkText.length + trimmedAmount;
       }
 
       console.log(`[TTS API Stream] Split into ${chunks.length} chunks`);
@@ -154,6 +170,7 @@ export async function POST(request: NextRequest) {
           });
 
           const audioBuffers: Buffer[] = [];
+          // chunkTextOffsets already calculated during chunking (accounts for .trim())
 
           for (let i = 0; i < chunks.length; i++) {
             // Progress from 30% to 80% based on chunk completion
@@ -181,16 +198,29 @@ export async function POST(request: NextRequest) {
             const buffer = Buffer.from(await response.arrayBuffer());
             audioBuffers.push(buffer);
 
+            // NEW: Stream chunk immediately (don't wait for concatenation)
+            const estimatedDuration = estimateChunkDuration(chunks[i], validSpeed);
+            sendEvent('audio_chunk', {
+              index: i,
+              total: totalChunks,
+              data: buffer.toString('base64'),
+              textStart: chunkTextOffsets[i].start,
+              textEnd: chunkTextOffsets[i].end,
+              estimatedDuration: estimatedDuration,
+              isFirst: i === 0,
+              sizeBytes: buffer.length,
+            });
+
             const completedProgress = 30 + Math.floor(((i + 1) / totalChunks) * 50);
             sendEvent('progress', {
               type: 'chunk_complete',
               progress: completedProgress,
-              message: `Chunk ${i + 1} of ${totalChunks} complete`,
+              message: `Chunk ${i + 1} of ${totalChunks} streamed`,
               totalChunks,
               currentChunk: i + 1
             });
 
-            console.log(`[TTS API Stream] Chunk ${i + 1}/${totalChunks} complete`);
+            console.log(`[TTS API Stream] Chunk ${i + 1}/${totalChunks} streamed to client`);
           }
 
           sendEvent('progress', {
@@ -215,7 +245,18 @@ export async function POST(request: NextRequest) {
             message: 'Audio generation complete'
           });
 
-          // Send final result
+          // NEW: Send generation_complete event for progressive streaming
+          sendEvent('generation_complete', {
+            success: true,
+            totalChunks: totalChunks,
+            totalDuration: durationSeconds,
+            cost,
+            charCount,
+            voice,
+            speed: validSpeed,
+          });
+
+          // Send final result (for backwards compatibility with single-blob mode)
           sendEvent('result', {
             success: true,
             audioData: buffer.toString('base64'),
@@ -272,4 +313,18 @@ export async function POST(request: NextRequest) {
 function isValidVoice(voice: string): voice is OpenAIVoice {
   const validVoices: OpenAIVoice[] = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
   return validVoices.includes(voice as OpenAIVoice);
+}
+
+/**
+ * Estimate chunk duration based on text length and speed
+ * Uses average reading speed of 150 words per minute
+ *
+ * TODO: Phase 3 should validate actual vs estimated durations (Phase 2 Code Review Issue #7)
+ * Compare Web Audio API audioBuffer.duration with estimatedDuration and log variance
+ * to refine the 150 wpm assumption for OpenAI TTS voices
+ */
+function estimateChunkDuration(text: string, speed: number): number {
+  const wordCount = text.split(/\s+/).length;
+  const durationSeconds = Math.ceil((wordCount / 150) * 60 / speed);
+  return durationSeconds;
 }
