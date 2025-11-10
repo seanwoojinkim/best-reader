@@ -11,8 +11,7 @@ interface ChapterListProps {
   onChapterSelect: (chapter: Chapter) => void;
   onGenerateAudio: (chapter: Chapter) => void;
   onPlayAudio: (chapter: Chapter) => void;
-  generatingChapterId: number | null;
-  generationProgress: number;
+  generatingChapters: Map<number, { progress: number; message?: string }>;
 }
 
 export default function ChapterList({
@@ -22,8 +21,7 @@ export default function ChapterList({
   onChapterSelect,
   onGenerateAudio,
   onPlayAudio,
-  generatingChapterId,
-  generationProgress,
+  generatingChapters,
 }: ChapterListProps) {
   if (chapters.length === 0) {
     return (
@@ -63,8 +61,9 @@ export default function ChapterList({
               voice={voice}
               onGenerate={() => onGenerateAudio(chapter)}
               onPlay={() => onPlayAudio(chapter)}
-              generating={generatingChapterId === chapter.id}
-              progress={generatingChapterId === chapter.id ? generationProgress : 0}
+              generating={chapter.id ? generatingChapters.has(chapter.id) : false}
+              progress={chapter.id ? generatingChapters.get(chapter.id)?.progress || 0 : 0}
+              message={chapter.id ? generatingChapters.get(chapter.id)?.message : undefined}
             />
           </div>
         </div>

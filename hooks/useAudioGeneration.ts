@@ -12,6 +12,7 @@ interface GenerateAudioOptions {
   chapter: Chapter;
   voice: OpenAIVoice;
   speed?: number;
+  onProgress?: (progress: number, message?: string) => void;
 }
 
 interface UseAudioGenerationResult {
@@ -32,6 +33,7 @@ export function useAudioGeneration({ book }: UseAudioGenerationProps): UseAudioG
     chapter,
     voice,
     speed = 1.0,
+    onProgress,
   }: GenerateAudioOptions): Promise<AudioFile | null> => {
     console.log('[useAudioGeneration] Starting generation for chapter:', chapter.title);
 
@@ -49,8 +51,9 @@ export function useAudioGeneration({ book }: UseAudioGenerationProps): UseAudioG
     setAbortController(controller);
 
     try {
-      // Step 1: Extract chapter text (10% -> 30%)
+      // Step 1: Extract chapter text (10%)
       setProgress(10);
+      if (onProgress) onProgress(10, 'Extracting chapter text');
       console.log('[useAudioGeneration] Extracting chapter text...', { cfiStart: chapter.cfiStart, cfiEnd: chapter.cfiEnd });
       const chapterText = await getChapterText(book, chapter.cfiStart, chapter.cfiEnd);
       console.log('[useAudioGeneration] Extracted text length:', chapterText.length);
@@ -59,11 +62,9 @@ export function useAudioGeneration({ book }: UseAudioGenerationProps): UseAudioG
         throw new Error('Generation cancelled');
       }
 
-      setProgress(30);
-
-      // Step 2: Call API (30% -> 80%)
-      console.log('[useAudioGeneration] Calling TTS API...', { voice, speed, textLength: chapterText.length });
-      const response = await fetch('/api/tts/generate', {
+      // Step 2: Call streaming API (10% -> 90%)
+      console.log('[useAudioGeneration] Calling streaming TTS API...', { voice, speed, textLength: chapterText.length });
+      const response = await fetch('/api/tts/generate-stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -73,20 +74,64 @@ export function useAudioGeneration({ book }: UseAudioGenerationProps): UseAudioG
         }),
         signal: controller.signal,
       });
-      console.log('[useAudioGeneration] API response status:', response.status);
 
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Failed to generate audio');
       }
 
-      setProgress(80);
+      // Read the streaming response
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
 
-      const data = await response.json();
-
-      if (!data.success) {
-        throw new Error(data.error);
+      if (!reader) {
+        throw new Error('Failed to read streaming response');
       }
+
+      let buffer = '';
+      let resultData: any = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) break;
+        if (controller.signal.aborted) {
+          reader.cancel();
+          throw new Error('Generation cancelled');
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Process complete SSE messages
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+
+          const eventMatch = line.match(/^event: (\w+)\ndata: ([\s\S]+)$/);
+          if (!eventMatch) continue;
+
+          const [, eventType, dataStr] = eventMatch;
+          const data = JSON.parse(dataStr);
+
+          if (eventType === 'progress') {
+            setProgress(data.progress);
+            if (onProgress) onProgress(data.progress, data.message);
+            console.log(`[useAudioGeneration] Progress: ${data.progress}% - ${data.message}`);
+          } else if (eventType === 'result') {
+            resultData = data;
+          } else if (eventType === 'error') {
+            throw new Error(data.error);
+          }
+        }
+      }
+
+      if (!resultData || !resultData.success) {
+        throw new Error('No result data received from streaming API');
+      }
+
+      const data = resultData;
 
       // Step 3: Convert base64 to Blob (80% -> 90%)
       const audioBlob = base64ToBlob(data.audioData, 'audio/mpeg');

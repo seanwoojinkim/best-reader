@@ -151,9 +151,9 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
     },
   });
 
-  // Audio generation (TTS Phase 3)
+  // Audio generation (TTS Phase 3) - Support multiple concurrent generations
   const audioGeneration = useAudioGeneration({ book });
-  const [generatingChapterId, setGeneratingChapterId] = useState<number | null>(null);
+  const [generatingChapters, setGeneratingChapters] = useState<Map<number, { progress: number; message?: string }>>(new Map());
 
   // Track listening time when audio plays/pauses (TTS Phase 4)
   useEffect(() => {
@@ -398,13 +398,31 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
                 }
               }}
               onGenerateAudio={async (chapter) => {
-                setGeneratingChapterId(chapter.id || null);
+                if (!chapter.id) return;
+
+                // Add chapter to generating map
+                setGeneratingChapters(prev => new Map(prev).set(chapter.id!, { progress: 0 }));
+
                 const result = await audioGeneration.generateAudio({
                   chapter,
                   voice: audioSettings?.voice || 'alloy',
                   speed: audioSettings?.playbackSpeed || 1.0,
+                  onProgress: (progress, message) => {
+                    setGeneratingChapters(prev => {
+                      const next = new Map(prev);
+                      next.set(chapter.id!, { progress, message });
+                      return next;
+                    });
+                  },
                 });
-                setGeneratingChapterId(null);
+
+                // Remove chapter from generating map when done
+                setGeneratingChapters(prev => {
+                  const next = new Map(prev);
+                  next.delete(chapter.id!);
+                  return next;
+                });
+
                 if (result) {
                   console.log('[TTS Phase 3] Audio generated successfully:', result);
                 }
@@ -413,8 +431,7 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
                 setCurrentAudioChapter(chapter);
                 setShowChapterList(false);
               }}
-              generatingChapterId={generatingChapterId}
-              generationProgress={audioGeneration.progress}
+              generatingChapters={generatingChapters}
             />
           </div>
         </>

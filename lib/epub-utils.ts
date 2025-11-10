@@ -200,13 +200,15 @@ export async function getChapterText(
   cfiEnd: string
 ): Promise<string> {
   // Find the start and end spine indices
-  const startIndex = book.spine.items.findIndex((item: any) => {
+  // Note: epub.js Spine type doesn't expose 'items', but it exists at runtime
+  const spine = book.spine as any;
+  const startIndex = spine.items.findIndex((item: any) => {
     return item.href === cfiStart ||
            item.href.endsWith(cfiStart) ||
            item.href.includes(cfiStart);
   });
 
-  const endIndex = book.spine.items.findIndex((item: any) => {
+  const endIndex = spine.items.findIndex((item: any) => {
     return item.href === cfiEnd ||
            item.href.endsWith(cfiEnd) ||
            item.href.includes(cfiEnd);
@@ -214,16 +216,18 @@ export async function getChapterText(
 
   if (startIndex === -1) {
     console.error('[getChapterText] Start chapter not found:', cfiStart);
-    console.error('Available spine items:', book.spine.items.map((item: any) => item.href));
+    console.error('Available spine items:', spine.items.map((item: any) => item.href));
     throw new Error(`Chapter not found: ${cfiStart}`);
   }
 
-  // If endIndex not found or same as start, just get one section
-  const actualEndIndex = endIndex === -1 ? startIndex : endIndex;
+  // If endIndex not found, just get one section
+  // If endIndex is found, extract up to but NOT including the end section
+  // (since cfiEnd is the start of the NEXT chapter)
+  const actualEndIndex = endIndex === -1 ? startIndex : endIndex - 1;
 
-  console.log(`[getChapterText] Extracting from spine index ${startIndex} to ${actualEndIndex}`);
+  console.log(`[getChapterText] Extracting from spine index ${startIndex} to ${actualEndIndex} (exclusive of ${endIndex})`);
 
-  // Extract text from all sections in the range (inclusive)
+  // Extract text from all sections in the range (inclusive of start, exclusive of next chapter)
   let fullText = '';
   for (let i = startIndex; i <= actualEndIndex; i++) {
     const section = book.spine.get(i);

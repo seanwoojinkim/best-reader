@@ -83,9 +83,10 @@ export async function POST(request: NextRequest) {
 
     // Generate audio for each chunk and concatenate
     const audioBuffers: Buffer[] = [];
+    const totalChunks = chunks.length;
 
     for (let i = 0; i < chunks.length; i++) {
-      console.log(`[TTS API] Generating chunk ${i + 1}/${chunks.length} (${chunks[i].length} chars)`);
+      console.log(`[TTS API] Generating chunk ${i + 1}/${totalChunks} (${chunks[i].length} chars)`);
 
       const response = await openai.audio.speech.create({
         model: 'tts-1',
@@ -97,6 +98,8 @@ export async function POST(request: NextRequest) {
 
       const buffer = Buffer.from(await response.arrayBuffer());
       audioBuffers.push(buffer);
+
+      console.log(`[TTS API] Chunk ${i + 1}/${totalChunks} complete`);
     }
 
     // Concatenate all audio buffers
