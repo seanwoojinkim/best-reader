@@ -32,6 +32,13 @@ export async function POST(request: NextRequest) {
 
     const { chapterText, voice, speed } = await request.json();
 
+    console.log('[TTS API Stream] Received request:', {
+      textLength: chapterText?.length,
+      voice,
+      speed,
+      voiceType: typeof voice
+    });
+
     // Validate input
     if (!chapterText || typeof chapterText !== 'string') {
       return new Response(
@@ -44,8 +51,12 @@ export async function POST(request: NextRequest) {
     }
 
     if (!voice || !isValidVoice(voice)) {
+      console.error('[TTS API Stream] Invalid voice:', { voice, isValid: isValidVoice(voice) });
       return new Response(
-        JSON.stringify({ success: false, error: 'Invalid voice selection' }),
+        JSON.stringify({
+          success: false,
+          error: `Invalid voice selection: ${voice}. Valid voices: alloy, echo, fable, onyx, nova, shimmer`
+        }),
         {
           status: 400,
           headers: { 'Content-Type': 'application/json' },

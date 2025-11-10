@@ -63,15 +63,24 @@ export function useAudioGeneration({ book }: UseAudioGenerationProps): UseAudioG
       }
 
       // Step 2: Call streaming API (10% -> 90%)
-      console.log('[useAudioGeneration] Calling streaming TTS API...', { voice, speed, textLength: chapterText.length });
+      console.log('[useAudioGeneration] Calling streaming TTS API...', {
+        voice,
+        voiceType: typeof voice,
+        speed,
+        textLength: chapterText.length
+      });
+
+      const requestBody = {
+        chapterText,
+        voice,
+        speed,
+      };
+      console.log('[useAudioGeneration] Request body:', JSON.stringify(requestBody).substring(0, 200));
+
       const response = await fetch('/api/tts/generate-stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chapterText,
-          voice,
-          speed,
-        }),
+        body: JSON.stringify(requestBody),
         signal: controller.signal,
       });
 
