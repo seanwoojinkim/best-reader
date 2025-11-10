@@ -190,8 +190,16 @@ export function useEpubReader({
   }, [rendition]);
 
   const goToLocation = useCallback(async (cfi: string) => {
+    console.log('[useEpubReader] goToLocation called with:', cfi);
+    console.trace('[useEpubReader] goToLocation call stack');
     if (rendition) {
-      await rendition.display(cfi);
+      try {
+        await rendition.display(cfi);
+        console.log('[useEpubReader] goToLocation completed successfully');
+      } catch (error) {
+        console.error('[useEpubReader] goToLocation failed:', error);
+        throw error;
+      }
     }
   }, [rendition]);
 

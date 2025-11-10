@@ -187,10 +187,11 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
 
   // Sync when user navigates pages while audio is playing
   useEffect(() => {
-    if (audioPlayer.playing && currentLocation) {
+    // Only sync if audio is actually playing AND sync is enabled AND there's an audio chapter
+    if (audioPlayer.playing && syncEnabled && currentAudioChapter && currentLocation) {
       syncReadingToAudio();
     }
-  }, [currentLocation, syncReadingToAudio, audioPlayer.playing]);
+  }, [currentLocation, syncReadingToAudio, audioPlayer.playing, syncEnabled, currentAudioChapter]);
 
   // Auto-hide controls after configured delay
   useEffect(() => {
@@ -392,9 +393,18 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
               voice={audioSettings?.voice || 'alloy'}
               onChapterSelect={(chapter) => {
                 // Navigate to chapter in reader
+                console.log('[ReaderView] Chapter select clicked:', {
+                  title: chapter.title,
+                  cfiStart: chapter.cfiStart,
+                  cfiEnd: chapter.cfiEnd
+                });
                 if (goToLocation && chapter.cfiStart) {
-                  goToLocation(chapter.cfiStart);
-                  setShowChapterList(false);
+                  try {
+                    goToLocation(chapter.cfiStart);
+                    setShowChapterList(false);
+                  } catch (error) {
+                    console.error('[ReaderView] Navigation error:', error);
+                  }
                 }
               }}
               onGenerateAudio={async (chapter) => {
@@ -427,24 +437,23 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
                   console.log('[TTS Phase 3] Audio generated successfully:', result);
                 }
               }}
-              onPlayAudio={async (chapter) => {
+              onPlayAudio={(chapter) => {
+                console.log('[ReaderView] Play audio clicked for chapter:', {
+                  title: chapter.title,
+                  cfiStart: chapter.cfiStart,
+                  hasGoToLocation: !!goToLocation,
+                  hasBook: !!book
+                });
+
                 setCurrentAudioChapter(chapter);
-                setShowChapterList(false);
-                // Navigate to the chapter when playing audio
-                if (goToLocation && chapter.cfiStart && book) {
-                  try {
-                    // Ensure book is ready before navigation
-                    await book.ready;
-                    await goToLocation(chapter.cfiStart);
-                  } catch (error) {
-                    console.error('[ReaderView] Failed to navigate to chapter:', {
-                      error,
-                      chapterTitle: chapter.title,
-                      cfiStart: chapter.cfiStart
-                    });
-                    // If navigation fails, audio will still play from current position
-                  }
+
+                // Navigate to the chapter when playing audio (same as onChapterSelect)
+                if (goToLocation && chapter.cfiStart) {
+                  console.log('[ReaderView] Calling goToLocation with:', chapter.cfiStart);
+                  goToLocation(chapter.cfiStart);
                 }
+
+                setShowChapterList(false);
               }}
               generatingChapters={generatingChapters}
             />
