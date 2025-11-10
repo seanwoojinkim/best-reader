@@ -119,3 +119,27 @@ export interface AudioUsage {
 
 // OpenAI voice types
 export type OpenAIVoice = 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer';
+
+// ============================================================
+// Sentence Synchronization Interfaces (TTS Phase: Sentence Sync)
+// ============================================================
+
+// Sentence metadata for audio synchronization
+export interface SentenceMetadata {
+  text: string;               // Sentence text
+  startChar: number;          // Character position in chapter
+  endChar: number;            // Character position end
+  startTime: number;          // Estimated start time (seconds)
+  endTime: number;            // Estimated end time (seconds)
+  charCount: number;          // Sentence character count
+}
+
+// Sentence synchronization data
+export interface SentenceSyncData {
+  id?: number;
+  audioFileId: number;        // FK to audioFiles table
+  chapterId: number;          // FK for easier querying
+  sentences: SentenceMetadata[];
+  generatedAt: Date;
+  version: number;            // Schema version for migrations
+}
