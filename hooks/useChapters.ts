@@ -40,9 +40,29 @@ export function useChapters({ bookId, book }: UseChaptersProps): UseChaptersResu
 
       if (existingChapters.length === 0) {
         // Extract chapters from EPUB
+        console.log('[useChapters] No chapters found, extracting...');
         const extractedChapters = await extractChapters(book, bookId);
         await saveChapters(extractedChapters);
         existingChapters = await getChapters(bookId);
+      } else {
+        // Check if existing chapters have valid navigation references
+        // Old chapters might have invalid hrefs that don't work with rendition.display()
+        const hasInvalidRefs = existingChapters.some(ch => {
+          // Check for incomplete CFIs (partial CFIs like "/6/10" without epubcfi wrapper)
+          // or obviously wrong hrefs
+          return !ch.cfiStart ||
+                 ch.cfiStart.length < 5 ||
+                 (ch.cfiStart.startsWith('/') && !ch.cfiStart.startsWith('epubcfi('));
+        });
+
+        if (hasInvalidRefs) {
+          console.log('[useChapters] Found invalid chapter references, re-extracting...');
+          // Re-extract with improved logic
+          await deleteChapters(bookId);
+          const extractedChapters = await extractChapters(book, bookId);
+          await saveChapters(extractedChapters);
+          existingChapters = await getChapters(bookId);
+        }
       }
 
       setChapters(existingChapters);
