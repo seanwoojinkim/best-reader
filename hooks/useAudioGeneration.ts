@@ -1,7 +1,9 @@
 import { useState, useCallback } from 'react';
 import type { Chapter, OpenAIVoice, AudioFile } from '@/types';
-import { saveAudioFile, logAudioUsage } from '@/lib/db';
+import { saveAudioFile, logAudioUsage, saveSentenceSyncData } from '@/lib/db';
 import { getChapterText } from '@/lib/epub-utils';
+import { parseChapterIntoSentences } from '@/lib/sentence-parser';
+import { generateSentenceTimestamps } from '@/lib/duration-estimator';
 import type { Book as EpubBook } from 'epubjs';
 
 interface UseAudioGenerationProps {
@@ -169,6 +171,36 @@ export function useAudioGeneration({ book }: UseAudioGenerationProps): UseAudioG
         voice: data.voice,
         timestamp: new Date(),
       });
+
+      // Step 5: Generate sentence sync data (90% -> 95%)
+      try {
+        setProgress(92);
+        if (onProgress) onProgress(92, 'Generating sentence synchronization data');
+        console.log('[useAudioGeneration] Parsing sentences for synchronization...');
+
+        const parsedSentences = parseChapterIntoSentences(chapterText);
+        console.log(`[useAudioGeneration] Parsed ${parsedSentences.length} sentences`);
+
+        const sentenceMetadata = generateSentenceTimestamps(
+          parsedSentences,
+          data.duration
+        );
+
+        await saveSentenceSyncData({
+          audioFileId: audioFileId,
+          chapterId: chapter.id,
+          sentences: sentenceMetadata,
+          generatedAt: new Date(),
+          version: 1,
+        });
+
+        console.log(`[useAudioGeneration] Saved ${sentenceMetadata.length} sentences for sync`);
+        setProgress(95);
+      } catch (sentenceError) {
+        // Don't fail audio generation if sentence parsing fails
+        console.error('[useAudioGeneration] Failed to generate sentence sync data:', sentenceError);
+        // Continue anyway - audio will work without sentence sync
+      }
 
       setProgress(100);
       setGenerating(false);

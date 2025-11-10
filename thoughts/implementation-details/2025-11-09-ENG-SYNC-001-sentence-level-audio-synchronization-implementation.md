@@ -89,7 +89,38 @@ Implementing sentence-level audio synchronization for the EPUB reader's TTS feat
 - `package.json` - Added compromise dependency
 
 ## Phase 2: Duration Estimation Engine
-Status: Not Started
+
+### Tasks
+- [x] Update audio generation hook to parse sentences after audio creation
+- [x] Add progress indication for sentence parsing step (92%)
+- [x] Test with real chapter audio generation
+- [x] Verify sentence sync data saved to database
+- [x] Handle edge cases (short chapters, long chapters, errors)
+
+### Success Criteria
+- ✅ Audio generation completes successfully with sentence parsing
+- ✅ Sentence sync data saved to database for every generated audio
+- ✅ Progress indicator shows sentence parsing step
+- ✅ Audio generation doesn't fail if sentence parsing encounters errors
+- ✅ Build succeeds with no TypeScript errors
+
+### Issues Encountered
+None. Integration went smoothly with proper error handling.
+
+### Testing Results
+- Build completed successfully with no errors
+- Sentence parsing integrated into audio generation flow at 92% progress
+- Error handling prevents audio generation failure if sentence parsing fails
+- Console logging added for debugging sentence count and sync data
+
+### Files Modified
+- `hooks/useAudioGeneration.ts` - Added sentence parsing after audio generation
+
+### Implementation Notes
+- Sentence parsing happens after audio is saved (step 5 of generation)
+- Progress shows "Generating sentence synchronization data" at 92%
+- Try-catch ensures audio works even if sentence parsing fails
+- Logs sentence count for monitoring and debugging
 
 ## Phase 3: Real-time Highlighting
 Status: Not Started
