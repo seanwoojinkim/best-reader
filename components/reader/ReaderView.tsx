@@ -3,7 +3,7 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { useSettingsStore } from '@/stores/settingsStore';
-import { savePosition, getAudioFile } from '@/lib/db';
+import { savePosition, getAudioFile, getSentenceSyncData } from '@/lib/db';
 import { useEpubReader } from '@/hooks/useEpubReader';
 import { useHighlights } from '@/hooks/useHighlights';
 import { useSession } from '@/hooks/useSession';
@@ -11,9 +11,11 @@ import { useReadingStats } from '@/hooks/useReadingStats';
 import { useChapters } from '@/hooks/useChapters';
 import { useAudioPlayer } from '@/hooks/useAudioPlayer';
 import { useAudioGeneration } from '@/hooks/useAudioGeneration';
+import { useSentenceSync } from '@/hooks/useSentenceSync';
 import { getAudioSettings, getDefaultAudioSettings } from '@/lib/db';
 import { timestampToCFI, cfiToTimestamp, findChapterByCFI } from '@/lib/audio-sync';
-import type { Chapter, AudioSettings } from '@/types';
+import { SentenceHighlighter } from '@/lib/sentence-highlighter';
+import type { Chapter, AudioSettings, SentenceSyncData } from '@/types';
 import { UI_CONSTANTS } from '@/lib/constants';
 import type { HighlightColor } from '@/lib/constants';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
@@ -53,6 +55,8 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
   const [syncEnabled, setSyncEnabled] = useState(true); // TTS Phase 4: Audio-reading sync toggle
   const lastSyncTimeRef = useRef<number>(0); // TTS Phase 4: Rate limit sync updates
   const syncInProgressRef = useRef<boolean>(false); // Prevent concurrent sync operations
+  const [sentenceSyncData, setSentenceSyncData] = useState<SentenceSyncData | null>(null); // TTS Phase: Sentence Sync
+  const highlighterRef = useRef<SentenceHighlighter | null>(null); // TTS Phase: Sentence Sync
   const { showControls, toggleControls, setShowControls } = useSettingsStore();
 
   const { book, rendition, loading, currentLocation, progress, totalLocations, nextPage, prevPage, goToLocation } =
@@ -133,6 +137,45 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
     loadAudioSettings();
   }, [bookId]);
 
+  // Load sentence sync data when audio chapter changes (TTS Phase: Sentence Sync)
+  useEffect(() => {
+    const loadSentenceData = async () => {
+      if (!currentAudioChapter?.id) {
+        setSentenceSyncData(null);
+        return;
+      }
+
+      try {
+        const audioFile = await getAudioFile(currentAudioChapter.id);
+        if (audioFile?.id) {
+          const data = await getSentenceSyncData(audioFile.id);
+          setSentenceSyncData(data || null);
+          console.log(`[TTS Sentence Sync] Loaded ${data?.sentences.length || 0} sentences for chapter`);
+        }
+      } catch (error) {
+        console.error('[TTS Sentence Sync] Failed to load sentence data:', error);
+        setSentenceSyncData(null);
+      }
+    };
+
+    loadSentenceData();
+  }, [currentAudioChapter]);
+
+  // Initialize highlighter when rendition is ready (TTS Phase: Sentence Sync)
+  useEffect(() => {
+    if (rendition && !highlighterRef.current) {
+      highlighterRef.current = new SentenceHighlighter(rendition);
+      console.log('[TTS Sentence Sync] Highlighter initialized');
+    }
+  }, [rendition]);
+
+  // Wrap sentences when data is loaded (TTS Phase: Sentence Sync)
+  useEffect(() => {
+    if (highlighterRef.current && sentenceSyncData && currentAudioChapter) {
+      highlighterRef.current.wrapSentences(sentenceSyncData.sentences);
+    }
+  }, [sentenceSyncData, currentAudioChapter]);
+
   // Audio playback (TTS Phase 3, Phase 4: with sync)
   const audioPlayer = useAudioPlayer({
     chapter: currentAudioChapter,
@@ -161,6 +204,25 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
   useEffect(() => {
     trackListeningTime(audioPlayer.playing);
   }, [audioPlayer.playing, trackListeningTime]);
+
+  // Use sentence sync hook to track current sentence (TTS Phase: Sentence Sync)
+  const { currentSentenceIndex } = useSentenceSync({
+    sentences: sentenceSyncData?.sentences || null,
+    currentTime: audioPlayer.currentTime,
+    playing: audioPlayer.playing,
+    onSentenceChange: (index) => {
+      if (highlighterRef.current && sentenceSyncData) {
+        highlighterRef.current.highlightSentence(index, sentenceSyncData.sentences);
+      }
+    },
+  });
+
+  // Clear highlight when audio stops (TTS Phase: Sentence Sync)
+  useEffect(() => {
+    if (!audioPlayer.playing && highlighterRef.current) {
+      highlighterRef.current.clearHighlight();
+    }
+  }, [audioPlayer.playing]);
 
   // TTS Phase 4: Sync reading → audio position when user navigates
   const syncReadingToAudio = useCallback(async () => {
