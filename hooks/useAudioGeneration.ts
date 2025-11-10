@@ -1,6 +1,12 @@
 import { useState, useCallback } from 'react';
-import type { Chapter, OpenAIVoice, AudioFile } from '@/types';
-import { saveAudioFile, logAudioUsage, saveSentenceSyncData } from '@/lib/db';
+import type { Chapter, OpenAIVoice, AudioFile, AudioChunk } from '@/types';
+import {
+  saveAudioFile,
+  logAudioUsage,
+  saveSentenceSyncData,
+  saveChunkAndUpdateProgress,
+  completeAudioFile
+} from '@/lib/db';
 import { getChapterText } from '@/lib/epub-utils';
 import { parseChapterIntoSentences } from '@/lib/sentence-parser';
 import { generateSentenceTimestamps } from '@/lib/duration-estimator';
@@ -15,6 +21,7 @@ interface GenerateAudioOptions {
   voice: OpenAIVoice;
   speed?: number;
   onProgress?: (progress: number, message?: string) => void;
+  onFirstChunkReady?: (chapterId: number, audioFileId: number) => void;
 }
 
 interface UseAudioGenerationResult {
@@ -36,6 +43,7 @@ export function useAudioGeneration({ book }: UseAudioGenerationProps): UseAudioG
     voice,
     speed = 1.0,
     onProgress,
+    onFirstChunkReady,
   }: GenerateAudioOptions): Promise<AudioFile | null> => {
     console.log('[useAudioGeneration] Starting generation for chapter:', chapter.title);
 
@@ -100,7 +108,9 @@ export function useAudioGeneration({ book }: UseAudioGenerationProps): UseAudioG
       }
 
       let buffer = '';
-      let resultData: any = null;
+      let audioFileId: number | null = null;
+      const chunks: Array<Omit<AudioChunk, 'id'>> = [];
+      let generationMetadata: any = null;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -130,45 +140,98 @@ export function useAudioGeneration({ book }: UseAudioGenerationProps): UseAudioG
             setProgress(data.progress);
             if (onProgress) onProgress(data.progress, data.message);
             console.log(`[useAudioGeneration] Progress: ${data.progress}% - ${data.message}`);
+          } else if (eventType === 'audio_chunk') {
+            // NEW: Handle individual audio chunk
+            console.log(`[useAudioGeneration] Received chunk ${data.index + 1}/${data.total}`);
+
+            // Convert chunk base64 to Blob
+            const chunkBlob = base64ToBlob(data.data, 'audio/mpeg');
+
+            // Calculate startTime for this chunk (sum of previous chunk durations)
+            const startTime = chunks.reduce((sum, c) => sum + c.duration, 0);
+
+            // Create AudioFile metadata on first chunk
+            if (data.index === 0) {
+              const audioFile: Omit<AudioFile, 'id'> = {
+                chapterId: chapter.id,
+                duration: 0, // Will update on completion
+                voice: voice,
+                speed: speed,
+                generatedAt: new Date(),
+                sizeBytes: 0, // Will update on completion
+                totalChunks: data.total,
+                chunksComplete: 0,
+                isComplete: false,
+                isProgressive: true,
+              };
+
+              audioFileId = await saveAudioFile(audioFile);
+              console.log(`[useAudioGeneration] Created audio file metadata, ID: ${audioFileId}`);
+            }
+
+            // Save chunk to IndexedDB using atomic transaction
+            const chunk: Omit<AudioChunk, 'id'> = {
+              audioFileId: audioFileId!,
+              chunkIndex: data.index,
+              blob: chunkBlob,
+              duration: data.estimatedDuration,
+              textStart: data.textStart,
+              textEnd: data.textEnd,
+              startTime: startTime,
+              generatedAt: new Date(),
+            };
+
+            await saveChunkAndUpdateProgress(chunk, data.index + 1);
+            chunks.push(chunk);
+
+            console.log(`[useAudioGeneration] Saved chunk ${data.index} to IndexedDB`);
+
+            // NEW: Trigger playback after first chunk
+            if (data.index === 0 && onFirstChunkReady && chapter.id && audioFileId) {
+              console.log('[useAudioGeneration] First chunk ready, triggering callback');
+              onFirstChunkReady(chapter.id, audioFileId);
+            }
+          } else if (eventType === 'generation_complete') {
+            // NEW: Handle generation completion
+            generationMetadata = data;
+            console.log('[useAudioGeneration] Generation complete:', data);
+
+            // Update audio file with final metadata
+            if (audioFileId) {
+              const totalSizeBytes = chunks.reduce((sum, c) => sum + c.blob.size, 0);
+              await completeAudioFile(
+                audioFileId,
+                data.totalDuration,
+                totalSizeBytes
+              );
+            }
           } else if (eventType === 'result') {
-            resultData = data;
+            // KEEP: For backwards compatibility (ignored in progressive mode)
+            console.log('[useAudioGeneration] Received result event (backwards compatibility)');
           } else if (eventType === 'error') {
             throw new Error(data.error);
           }
         }
       }
 
-      if (!resultData || !resultData.success) {
-        throw new Error('No result data received from streaming API');
+      // Validate we got all the data
+      if (!audioFileId || chunks.length === 0) {
+        throw new Error('No chunks received from streaming API');
       }
 
-      const data = resultData;
-
-      // Step 3: Convert base64 to Blob (80% -> 90%)
-      const audioBlob = base64ToBlob(data.audioData, 'audio/mpeg');
+      if (!generationMetadata) {
+        throw new Error('No generation metadata received');
+      }
 
       setProgress(90);
-
-      // Step 4: Save to IndexedDB (90% -> 100%)
-      const audioFile: Omit<AudioFile, 'id'> = {
-        chapterId: chapter.id,
-        blob: audioBlob,
-        duration: data.duration,
-        voice: data.voice,
-        speed: data.speed,
-        generatedAt: new Date(),
-        sizeBytes: data.sizeBytes,
-      };
-
-      const audioFileId = await saveAudioFile(audioFile);
 
       // Log usage
       await logAudioUsage({
         chapterId: chapter.id,
         bookId: chapter.bookId,
-        charCount: data.charCount,
-        cost: data.cost,
-        voice: data.voice,
+        charCount: generationMetadata.charCount,
+        cost: generationMetadata.cost,
+        voice: generationMetadata.voice,
         timestamp: new Date(),
       });
 
@@ -183,7 +246,7 @@ export function useAudioGeneration({ book }: UseAudioGenerationProps): UseAudioG
 
         const sentenceMetadata = generateSentenceTimestamps(
           parsedSentences,
-          data.duration
+          generationMetadata.totalDuration
         );
 
         await saveSentenceSyncData({
@@ -206,7 +269,23 @@ export function useAudioGeneration({ book }: UseAudioGenerationProps): UseAudioG
       setGenerating(false);
       setAbortController(null);
 
-      return { ...audioFile, id: audioFileId };
+      // Return the completed audio file metadata
+      const completedAudioFile: AudioFile = {
+        id: audioFileId,
+        chapterId: chapter.id,
+        duration: generationMetadata.totalDuration,
+        voice: voice,
+        speed: speed,
+        generatedAt: new Date(),
+        sizeBytes: chunks.reduce((sum, c) => sum + c.blob.size, 0),
+        totalChunks: generationMetadata.totalChunks,
+        chunksComplete: generationMetadata.totalChunks,
+        isComplete: true,
+        completedAt: new Date(),
+        isProgressive: true,
+      };
+
+      return completedAudioFile;
     } catch (err: any) {
       if (err.name === 'AbortError' || err.message === 'Generation cancelled') {
         setError('Generation cancelled');

@@ -154,6 +154,17 @@ export async function POST(request: NextRequest) {
           });
 
           const audioBuffers: Buffer[] = [];
+          const chunkTextOffsets: { start: number; end: number }[] = [];
+
+          // Calculate text offsets for each chunk
+          let currentOffset = 0;
+          for (const chunk of chunks) {
+            chunkTextOffsets.push({
+              start: currentOffset,
+              end: currentOffset + chunk.length,
+            });
+            currentOffset += chunk.length;
+          }
 
           for (let i = 0; i < chunks.length; i++) {
             // Progress from 30% to 80% based on chunk completion
@@ -181,16 +192,29 @@ export async function POST(request: NextRequest) {
             const buffer = Buffer.from(await response.arrayBuffer());
             audioBuffers.push(buffer);
 
+            // NEW: Stream chunk immediately (don't wait for concatenation)
+            const estimatedDuration = estimateChunkDuration(chunks[i], validSpeed);
+            sendEvent('audio_chunk', {
+              index: i,
+              total: totalChunks,
+              data: buffer.toString('base64'),
+              textStart: chunkTextOffsets[i].start,
+              textEnd: chunkTextOffsets[i].end,
+              estimatedDuration: estimatedDuration,
+              isFirst: i === 0,
+              sizeBytes: buffer.length,
+            });
+
             const completedProgress = 30 + Math.floor(((i + 1) / totalChunks) * 50);
             sendEvent('progress', {
               type: 'chunk_complete',
               progress: completedProgress,
-              message: `Chunk ${i + 1} of ${totalChunks} complete`,
+              message: `Chunk ${i + 1} of ${totalChunks} streamed`,
               totalChunks,
               currentChunk: i + 1
             });
 
-            console.log(`[TTS API Stream] Chunk ${i + 1}/${totalChunks} complete`);
+            console.log(`[TTS API Stream] Chunk ${i + 1}/${totalChunks} streamed to client`);
           }
 
           sendEvent('progress', {
@@ -215,7 +239,18 @@ export async function POST(request: NextRequest) {
             message: 'Audio generation complete'
           });
 
-          // Send final result
+          // NEW: Send generation_complete event for progressive streaming
+          sendEvent('generation_complete', {
+            success: true,
+            totalChunks: totalChunks,
+            totalDuration: durationSeconds,
+            cost,
+            charCount,
+            voice,
+            speed: validSpeed,
+          });
+
+          // Send final result (for backwards compatibility with single-blob mode)
           sendEvent('result', {
             success: true,
             audioData: buffer.toString('base64'),
@@ -272,4 +307,14 @@ export async function POST(request: NextRequest) {
 function isValidVoice(voice: string): voice is OpenAIVoice {
   const validVoices: OpenAIVoice[] = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
   return validVoices.includes(voice as OpenAIVoice);
+}
+
+/**
+ * Estimate chunk duration based on text length and speed
+ * Uses average reading speed of 150 words per minute
+ */
+function estimateChunkDuration(text: string, speed: number): number {
+  const wordCount = text.split(/\s+/).length;
+  const durationSeconds = Math.ceil((wordCount / 150) * 60 / speed);
+  return durationSeconds;
 }
