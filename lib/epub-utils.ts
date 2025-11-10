@@ -122,12 +122,11 @@ export async function extractChapters(
     order: number,
     level: number
   ): Promise<number> => {
-    const cfiStart = item.href;
-
     // Get chapter text to calculate word/char counts
     const section = book.spine.get(item.href);
     let wordCount = 0;
     let charCount = 0;
+    let cfiStart = item.href; // fallback
 
     if (section) {
       try {
@@ -135,9 +134,25 @@ export async function extractChapters(
         const text = contents.textContent || '';
         charCount = text.length;
         wordCount = estimateWordCount(text);
+
+        // Generate proper CFI for this section
+        // This ensures navigation will work reliably with rendition.display()
+        if ((section as any).cfiBase) {
+          // Use the section's cfiBase which is a proper EPUB CFI
+          cfiStart = (section as any).cfiBase;
+          console.log('[extractChapters] Using cfiBase for:', item.label, '→', cfiStart);
+        } else if ((section as any).href) {
+          // Fallback to the section's canonical href from the spine
+          cfiStart = (section as any).href;
+          console.log('[extractChapters] Using spine href for:', item.label, '→', cfiStart);
+        } else {
+          console.warn('[extractChapters] No cfiBase or href found, using TOC href:', item.href);
+        }
       } catch (error) {
-        console.error('Error loading chapter:', error);
+        console.error('[extractChapters] Error loading chapter:', error);
       }
+    } else {
+      console.warn('[extractChapters] No spine section found for TOC item:', item.href);
     }
 
     chapters.push({
