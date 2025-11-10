@@ -122,8 +122,42 @@ export async function extractChapters(
     order: number,
     level: number
   ): Promise<number> => {
-    // Get chapter text to calculate word/char counts
-    const section = book.spine.get(item.href);
+    console.log('[extractChapters] Processing TOC item:', item.label, 'href:', item.href);
+
+    // Try multiple ways to find the spine section
+    // TOC hrefs might have fragments (e.g., "ch01.xhtml#section1") or different paths
+    let section = book.spine.get(item.href);
+
+    if (!section && item.href.includes('#')) {
+      // Try without the fragment
+      const hrefWithoutFragment = item.href.split('#')[0];
+      console.log('[extractChapters] Trying without fragment:', hrefWithoutFragment);
+      section = book.spine.get(hrefWithoutFragment);
+    }
+
+    if (!section) {
+      // Try to find by matching the end of the href
+      const spine = getEpubSpine(book);
+      if (spine?.items) {
+        const tocFile = item.href.split('#')[0]; // Remove fragment if present
+        const foundItem = spine.items.find((spineItem: any) => {
+          const spineHref = spineItem.href || spineItem.url || '';
+          // Match if the spine href ends with the TOC href or vice versa
+          return spineHref.endsWith(tocFile) || tocFile.endsWith(spineHref);
+        });
+
+        if (foundItem) {
+          const matchedHref = (foundItem as any).href || (foundItem as any).url;
+          console.log('[extractChapters] Found spine item by matching:', matchedHref);
+          // Now get the actual Section object using the matched href
+          section = book.spine.get(matchedHref);
+          if (!section) {
+            console.warn('[extractChapters] Found spine item but could not get Section:', matchedHref);
+          }
+        }
+      }
+    }
+
     let wordCount = 0;
     let charCount = 0;
     let cfiStart = item.href; // fallback
@@ -145,14 +179,18 @@ export async function extractChapters(
           // Fallback to the section's canonical href from the spine
           cfiStart = (section as any).href;
           console.log('[extractChapters] Using spine href for:', item.label, '→', cfiStart);
+        } else if ((section as any).url) {
+          // Some versions use 'url' instead of 'href'
+          cfiStart = (section as any).url;
+          console.log('[extractChapters] Using spine url for:', item.label, '→', cfiStart);
         } else {
-          console.warn('[extractChapters] No cfiBase or href found, using TOC href:', item.href);
+          console.warn('[extractChapters] No cfiBase/href/url found, using TOC href:', item.href);
         }
       } catch (error) {
         console.error('[extractChapters] Error loading chapter:', error);
       }
     } else {
-      console.warn('[extractChapters] No spine section found for TOC item:', item.href);
+      console.warn('[extractChapters] Could not find spine section for TOC item:', item.href, '- Chapter navigation may not work');
     }
 
     chapters.push({
