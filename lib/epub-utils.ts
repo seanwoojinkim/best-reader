@@ -116,6 +116,9 @@ export async function extractChapters(
   const toc = book.navigation.toc;
   const chapters: Omit<Chapter, 'id'>[] = [];
 
+  console.log('[extractChapters] TOC structure:', JSON.stringify(toc, null, 2).substring(0, 1000));
+  console.log('[extractChapters] Processing', toc.length, 'top-level TOC items');
+
   // Recursive function to flatten TOC
   const processNavItem = async (
     item: NavItem,
@@ -202,6 +205,8 @@ export async function extractChapters(
       level,
     });
 
+    console.log(`[extractChapters] Added chapter #${order}: "${item.label}" (level ${level}, href: ${cfiStart})`);
+
     let currentOrder = order + 1;
 
     // Process subitems recursively
@@ -228,6 +233,25 @@ export async function extractChapters(
   if (chapters.length > 0) {
     const lastSection = book.spine.last();
     chapters[chapters.length - 1].cfiEnd = lastSection?.cfiBase || '';
+  }
+
+  console.log('[extractChapters] FINAL RESULT: Returning', chapters.length, 'chapters');
+  console.log('[extractChapters] Chapter titles:', chapters.map(ch => ch.title));
+  console.log('[extractChapters] Chapter orders:', chapters.map(ch => ch.order));
+
+  // Check for duplicates in the final array
+  const seenOrders = new Set<number>();
+  const duplicateOrders = chapters.filter(ch => {
+    if (seenOrders.has(ch.order)) {
+      console.error('[extractChapters] DUPLICATE ORDER FOUND:', ch.order, ch.title);
+      return true;
+    }
+    seenOrders.add(ch.order);
+    return false;
+  });
+
+  if (duplicateOrders.length > 0) {
+    console.error('[extractChapters] WARNING: Found', duplicateOrders.length, 'duplicate chapters!');
   }
 
   return chapters;

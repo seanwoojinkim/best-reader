@@ -339,7 +339,11 @@ export async function cleanupOldAnalytics(daysToKeep: number = 90): Promise<void
  * Save chapters for a book
  */
 export async function saveChapters(chapters: Omit<Chapter, 'id'>[]): Promise<void> {
+  console.log('[saveChapters] Saving', chapters.length, 'chapters');
+  console.log('[saveChapters] First 3 chapter titles:', chapters.slice(0, 3).map(ch => ch.title));
+  console.log('[saveChapters] Chapter orders:', chapters.map(ch => ch.order));
   await db.chapters.bulkAdd(chapters);
+  console.log('[saveChapters] Successfully saved to database');
 }
 
 /**

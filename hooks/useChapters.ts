@@ -26,6 +26,9 @@ export function useChapters({ bookId, book }: UseChaptersProps): UseChaptersResu
   const [error, setError] = useState<string | null>(null);
 
   const loadChapters = useCallback(async () => {
+    console.log('[useChapters.loadChapters] CALLED for bookId:', bookId);
+    console.trace('[useChapters.loadChapters] Call stack');
+
     if (!book) {
       setLoading(false);
       return;
@@ -37,13 +40,17 @@ export function useChapters({ bookId, book }: UseChaptersProps): UseChaptersResu
     try {
       // Check if chapters already exist in DB
       let existingChapters = await getChapters(bookId);
+      console.log('[useChapters.loadChapters] Found', existingChapters.length, 'existing chapters in DB');
 
       if (existingChapters.length === 0) {
         // Extract chapters from EPUB
         console.log('[useChapters] No chapters found, extracting...');
         const extractedChapters = await extractChapters(book, bookId);
+        console.log('[useChapters] Extracted', extractedChapters.length, 'chapters');
+        console.log('[useChapters] Extracted chapter titles:', extractedChapters.map(ch => ch.title));
         await saveChapters(extractedChapters);
         existingChapters = await getChapters(bookId);
+        console.log('[useChapters] After save, DB has', existingChapters.length, 'chapters');
       } else {
         // Check if existing chapters have valid navigation references
         // Old chapters might have invalid hrefs that don't work with rendition.display()
@@ -60,8 +67,11 @@ export function useChapters({ bookId, book }: UseChaptersProps): UseChaptersResu
           // Re-extract with improved logic
           await deleteChapters(bookId);
           const extractedChapters = await extractChapters(book, bookId);
+          console.log('[useChapters] Re-extracted', extractedChapters.length, 'chapters');
+          console.log('[useChapters] Re-extracted chapter titles:', extractedChapters.map(ch => ch.title));
           await saveChapters(extractedChapters);
           existingChapters = await getChapters(bookId);
+          console.log('[useChapters] After re-save, DB has', existingChapters.length, 'chapters');
         }
       }
 

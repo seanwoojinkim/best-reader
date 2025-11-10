@@ -23,6 +23,9 @@ export default function ChapterList({
   onPlayAudio,
   generatingChapters,
 }: ChapterListProps) {
+  console.log('[ChapterList] Rendering', chapters.length, 'chapters');
+  console.log('[ChapterList] Chapter IDs:', chapters.map(ch => `${ch.id}:${ch.title?.trim().substring(0, 30)}`));
+
   if (chapters.length === 0) {
     return (
       <div className="p-4 text-center text-gray-500 dark:text-gray-400">
