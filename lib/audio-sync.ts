@@ -1,5 +1,6 @@
 import type { Book as EpubBook } from 'epubjs';
 import type { Chapter } from '@/types';
+import { getEpubLocations } from '@/types/epubjs-extensions';
 
 /**
  * Map audio timestamp to approximate CFI position within chapter
@@ -72,7 +73,8 @@ export async function cfiToTimestamp(
   try {
     // Check if CFI is within chapter range
     // Use epub.js compare method to check if cfi is before chapter start
-    const comparison = (book as any).locations?.cfiComparison?.(cfi, chapter.cfiStart);
+    const locations = getEpubLocations(book);
+    const comparison = locations?.cfiComparison(cfi, chapter.cfiStart);
     if (comparison !== undefined && comparison < 0) return 0; // Before chapter start
 
     const section = book.spine.get(chapter.cfiStart);
@@ -108,7 +110,7 @@ export function isCFIInChapter(
   cfi: string
 ): boolean {
   try {
-    const locations = (book as any).locations;
+    const locations = getEpubLocations(book);
     if (!locations?.cfiComparison) return false;
 
     const startComparison = locations.cfiComparison(cfi, chapter.cfiStart);

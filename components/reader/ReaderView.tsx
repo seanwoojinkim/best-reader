@@ -16,6 +16,7 @@ import { timestampToCFI, cfiToTimestamp, findChapterByCFI } from '@/lib/audio-sy
 import type { Chapter, AudioSettings } from '@/types';
 import { UI_CONSTANTS } from '@/lib/constants';
 import type { HighlightColor } from '@/lib/constants';
+import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import TapZones from './TapZones';
 import SettingsDrawer from './SettingsDrawer';
 import HighlightMenu from './HighlightMenu';
@@ -51,6 +52,7 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
   const [audioSettings, setAudioSettings] = useState<AudioSettings | null>(null);
   const [syncEnabled, setSyncEnabled] = useState(true); // TTS Phase 4: Audio-reading sync toggle
   const lastSyncTimeRef = useRef<number>(0); // TTS Phase 4: Rate limit sync updates
+  const syncInProgressRef = useRef<boolean>(false); // Prevent concurrent sync operations
   const { showControls, toggleControls, setShowControls } = useSettingsStore();
 
   const { book, rendition, loading, currentLocation, progress, totalLocations, nextPage, prevPage, goToLocation } =
@@ -164,24 +166,39 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
   const syncReadingToAudio = useCallback(async () => {
     if (!syncEnabled || !currentAudioChapter || !book || !currentLocation) return;
 
-    // Check if current reading position is in current audio chapter
-    const currentChapter = findChapterByCFI(book, chapters, currentLocation);
+    // Prevent concurrent sync operations - CRITICAL FIX
+    if (syncInProgressRef.current) {
+      console.log('[ReaderView] Sync already in progress, skipping');
+      return;
+    }
 
-    if (currentChapter?.id === currentAudioChapter.id) {
-      // Same chapter - sync timestamp
-      const timestamp = await cfiToTimestamp(book, currentAudioChapter, currentLocation, audioPlayer.duration);
-      if (timestamp !== null) {
-        audioPlayer.seek(timestamp);
+    syncInProgressRef.current = true;
+
+    try {
+      // Check if current reading position is in current audio chapter
+      const currentChapter = findChapterByCFI(book, chapters, currentLocation);
+
+      if (currentChapter?.id === currentAudioChapter.id) {
+        // Same chapter - sync timestamp
+        const timestamp = await cfiToTimestamp(book, currentAudioChapter, currentLocation, audioPlayer.duration);
+        if (timestamp !== null) {
+          audioPlayer.seek(timestamp);
+        }
+      } else if (currentChapter?.id) {
+        // Different chapter - check if it has audio and switch if available
+        const audioFile = await getAudioFile(currentChapter.id);
+        if (audioFile) {
+          setCurrentAudioChapter(currentChapter);
+        } else {
+          // Chapter has no audio, pause playback
+          audioPlayer.pause();
+        }
       }
-    } else if (currentChapter?.id) {
-      // Different chapter - check if it has audio and switch if available
-      const audioFile = await getAudioFile(currentChapter.id);
-      if (audioFile) {
-        setCurrentAudioChapter(currentChapter);
-      } else {
-        // Chapter has no audio, pause playback
-        audioPlayer.pause();
-      }
+    } catch (error) {
+      console.error('[ReaderView] Error during audio sync:', error);
+    } finally {
+      // Always reset the flag, even if error occurs
+      syncInProgressRef.current = false;
     }
   }, [syncEnabled, currentAudioChapter, book, currentLocation, chapters, audioPlayer]);
 
@@ -263,8 +280,9 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
   }
 
   return (
-    <div className="relative h-screen w-screen overflow-hidden">
-      {/* Controls Bar - Toggleable on all devices */}
+    <ErrorBoundary level="feature">
+      <div className="relative h-screen w-screen overflow-hidden">
+        {/* Controls Bar - Toggleable on all devices */}
       <div
         className={`
           absolute top-0 left-0 right-0 z-10 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm border-b border-gray-200 dark:border-gray-700
@@ -410,31 +428,35 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
               onGenerateAudio={async (chapter) => {
                 if (!chapter.id) return;
 
-                // Add chapter to generating map
-                setGeneratingChapters(prev => new Map(prev).set(chapter.id!, { progress: 0 }));
+                try {
+                  // Add chapter to generating map
+                  setGeneratingChapters(prev => new Map(prev).set(chapter.id!, { progress: 0 }));
 
-                const result = await audioGeneration.generateAudio({
-                  chapter,
-                  voice: audioSettings?.voice || 'alloy',
-                  speed: audioSettings?.playbackSpeed || 1.0,
-                  onProgress: (progress, message) => {
-                    setGeneratingChapters(prev => {
-                      const next = new Map(prev);
-                      next.set(chapter.id!, { progress, message });
-                      return next;
-                    });
-                  },
-                });
+                  const result = await audioGeneration.generateAudio({
+                    chapter,
+                    voice: audioSettings?.voice || 'alloy',
+                    speed: audioSettings?.playbackSpeed || 1.0,
+                    onProgress: (progress, message) => {
+                      setGeneratingChapters(prev => {
+                        const next = new Map(prev);
+                        next.set(chapter.id!, { progress, message });
+                        return next;
+                      });
+                    },
+                  });
 
-                // Remove chapter from generating map when done
-                setGeneratingChapters(prev => {
-                  const next = new Map(prev);
-                  next.delete(chapter.id!);
-                  return next;
-                });
-
-                if (result) {
-                  console.log('[TTS Phase 3] Audio generated successfully:', result);
+                  if (result) {
+                    console.log('[TTS Phase 3] Audio generated successfully:', result);
+                  }
+                } catch (error) {
+                  console.error('[TTS Phase 3] Audio generation error:', error);
+                } finally {
+                  // Always cleanup, even on error - CRITICAL FIX
+                  setGeneratingChapters(prev => {
+                    const next = new Map(prev);
+                    next.delete(chapter.id!);
+                    return next;
+                  });
                 }
               }}
               onPlayAudio={(chapter) => {
@@ -577,11 +599,12 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
         }}
       />
 
-      {/* Reader Container */}
-      <TapZones onPrevPage={prevPage} onNextPage={nextPage} onToggleControls={toggleControls}>
-        <div ref={containerRef} className="epub-container h-full w-full" />
-      </TapZones>
-    </div>
+        {/* Reader Container */}
+        <TapZones onPrevPage={prevPage} onNextPage={nextPage} onToggleControls={toggleControls}>
+          <div ref={containerRef} className="epub-container h-full w-full" />
+        </TapZones>
+      </div>
+    </ErrorBoundary>
   );
 }
 

@@ -1,5 +1,6 @@
 import ePub, { Book as EpubBook, NavItem } from 'epubjs';
 import type { Chapter } from '@/types';
+import { getEpubSpine } from '@/types/epubjs-extensions';
 
 /**
  * Helper function to wrap promises with a timeout
@@ -201,14 +202,18 @@ export async function getChapterText(
 ): Promise<string> {
   // Find the start and end spine indices
   // Note: epub.js Spine type doesn't expose 'items', but it exists at runtime
-  const spine = book.spine as any;
-  const startIndex = spine.items.findIndex((item: any) => {
+  const spine = getEpubSpine(book);
+  if (!spine) {
+    throw new Error('Book spine not available');
+  }
+
+  const startIndex = spine.items.findIndex((item) => {
     return item.href === cfiStart ||
            item.href.endsWith(cfiStart) ||
            item.href.includes(cfiStart);
   });
 
-  const endIndex = spine.items.findIndex((item: any) => {
+  const endIndex = spine.items.findIndex((item) => {
     return item.href === cfiEnd ||
            item.href.endsWith(cfiEnd) ||
            item.href.includes(cfiEnd);
@@ -216,7 +221,7 @@ export async function getChapterText(
 
   if (startIndex === -1) {
     console.error('[getChapterText] Start chapter not found:', cfiStart);
-    console.error('Available spine items:', spine.items.map((item: any) => item.href));
+    console.error('Available spine items:', spine.items.map((item) => item.href));
     throw new Error(`Chapter not found: ${cfiStart}`);
   }
 

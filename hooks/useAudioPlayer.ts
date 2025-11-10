@@ -34,6 +34,7 @@ export function useAudioPlayer({
   const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const currentObjectUrlRef = useRef<string | null>(null);
 
   // Initialize audio element - only create once, never recreate
   useEffect(() => {
@@ -82,6 +83,17 @@ export function useAudioPlayer({
     };
   }, []);
 
+  // Cleanup object URL on unmount
+  useEffect(() => {
+    return () => {
+      console.log('[useAudioPlayer] Component unmounting, cleaning up object URL');
+      if (currentObjectUrlRef.current) {
+        URL.revokeObjectURL(currentObjectUrlRef.current);
+        currentObjectUrlRef.current = null;
+      }
+    };
+  }, []);
+
   // Load chapter audio
   const loadChapter = useCallback(async (chapterToLoad: Chapter) => {
     if (!chapterToLoad.id || !audioRef.current) {
@@ -104,8 +116,16 @@ export function useAudioPlayer({
 
       console.log('[useAudioPlayer] Audio blob size:', audioFile.blob.size, 'type:', audioFile.blob.type);
 
+      // Revoke previous object URL to prevent memory leak
+      if (currentObjectUrlRef.current) {
+        console.log('[useAudioPlayer] Revoking previous object URL:', currentObjectUrlRef.current);
+        URL.revokeObjectURL(currentObjectUrlRef.current);
+        currentObjectUrlRef.current = null;
+      }
+
       // Create object URL from blob
       const audioUrl = URL.createObjectURL(audioFile.blob);
+      currentObjectUrlRef.current = audioUrl; // Store for later cleanup
       console.log('[useAudioPlayer] Object URL created:', audioUrl);
 
       // Pause current playback before loading new audio

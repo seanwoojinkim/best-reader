@@ -97,9 +97,9 @@ export async function deleteBook(id: number): Promise<void> {
   const chapters = await db.chapters.where('bookId').equals(id).toArray();
   const chapterIds = chapters.map(c => c.id).filter((id): id is number => id !== undefined);
 
-  // Delete audio files associated with chapters
-  for (const chapterId of chapterIds) {
-    await db.audioFiles.where('chapterId').equals(chapterId).delete();
+  // Delete all audio files for these chapters in one batch operation
+  if (chapterIds.length > 0) {
+    await db.audioFiles.where('chapterId').anyOf(chapterIds).delete();
   }
 
   // Delete all book-related data

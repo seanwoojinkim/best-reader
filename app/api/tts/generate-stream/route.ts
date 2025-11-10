@@ -50,6 +50,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validate text length to prevent excessive API costs
+    const MAX_CHAPTER_LENGTH = 100000; // ~25,000 words, ~$1.50 TTS cost
+    if (chapterText.length > MAX_CHAPTER_LENGTH) {
+      console.warn('[TTS API Stream] Chapter text exceeds maximum length:', {
+        length: chapterText.length,
+        maxLength: MAX_CHAPTER_LENGTH,
+      });
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: `Chapter text is too long (${chapterText.length} characters). Maximum allowed is ${MAX_CHAPTER_LENGTH} characters. Please split this chapter into smaller sections.`,
+        }),
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    // Sanitize input - remove control characters and null bytes
+    const sanitizedText = chapterText.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+    if (sanitizedText !== chapterText) {
+      console.warn('[TTS API Stream] Removed control characters from input');
+    }
+
     if (!voice || !isValidVoice(voice)) {
       console.error('[TTS API Stream] Invalid voice:', { voice, isValid: isValidVoice(voice) });
       return new Response(
@@ -70,11 +95,11 @@ export async function POST(request: NextRequest) {
     const MAX_CHARS = 4096;
     const chunks: string[] = [];
 
-    if (chapterText.length <= MAX_CHARS) {
-      chunks.push(chapterText);
+    if (sanitizedText.length <= MAX_CHARS) {
+      chunks.push(sanitizedText);
     } else {
-      console.log(`[TTS API Stream] Splitting chapter into chunks (${chapterText.length} chars)`);
-      let remainingText = chapterText;
+      console.log(`[TTS API Stream] Splitting chapter into chunks (${sanitizedText.length} chars)`);
+      let remainingText = sanitizedText;
 
       while (remainingText.length > 0) {
         if (remainingText.length <= MAX_CHARS) {
@@ -177,10 +202,10 @@ export async function POST(request: NextRequest) {
           const buffer = Buffer.concat(audioBuffers);
 
           // Calculate metadata
-          const charCount = chapterText.length;
+          const charCount = sanitizedText.length;
           const cost = (charCount / 1000) * 0.015;
           const sizeBytes = buffer.length;
-          const wordCount = chapterText.split(/\s+/).length;
+          const wordCount = sanitizedText.split(/\s+/).length;
           const durationSeconds = Math.ceil((wordCount / 150) * 60 / validSpeed);
 
           sendEvent('progress', {
