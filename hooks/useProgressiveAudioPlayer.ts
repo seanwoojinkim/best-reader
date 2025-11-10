@@ -21,6 +21,7 @@ interface UseProgressiveAudioPlayerResult {
   error: string | null;
   chunksLoaded: number;
   totalChunks: number;
+  currentPlayingChunk: number;
   isGenerating: boolean;
   playbackSpeed: number;
   play: () => Promise<void>;
@@ -545,6 +546,7 @@ export function useProgressiveAudioPlayer({
     error,
     chunksLoaded,
     totalChunks,
+    currentPlayingChunk,
     isGenerating,
     playbackSpeed,
     play,

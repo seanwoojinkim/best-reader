@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { flushSync } from 'react-dom';
 import dynamic from 'next/dynamic';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { savePosition, getAudioFile, getSentenceSyncData } from '@/lib/db';
@@ -216,11 +217,13 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
 
   // Phase 4: Auto-play progressive audio after first chunk loads
   useEffect(() => {
-    if (isProgressiveAudio && progressiveAudioPlayer.chunksLoaded > 0 && !progressiveAudioPlayer.playing && !progressiveAudioPlayer.loading) {
-      console.log('[ReaderView Phase 4] Auto-playing progressive audio after first chunk loaded');
+    if (isProgressiveAudio && progressiveAudioPlayer.chunksLoaded === 1 && !progressiveAudioPlayer.playing && !progressiveAudioPlayer.loading) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[ReaderView Phase 4] Auto-playing progressive audio after first chunk loaded');
+      }
       progressiveAudioPlayer.play();
     }
-  }, [isProgressiveAudio, progressiveAudioPlayer.chunksLoaded, progressiveAudioPlayer.playing, progressiveAudioPlayer.loading, progressiveAudioPlayer]);
+  }, [isProgressiveAudio, progressiveAudioPlayer.chunksLoaded, progressiveAudioPlayer.playing, progressiveAudioPlayer.loading]);
 
   // Audio generation (TTS Phase 3) - Support multiple concurrent generations
   const audioGeneration = useAudioGeneration({ book });
@@ -533,10 +536,12 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
                     },
                     // Phase 4: Auto-play after first chunk ready
                     onFirstChunkReady: async (chapterId, audioFileId) => {
-                      console.log('[ReaderView Phase 4] First chunk ready, starting progressive playback', {
-                        chapterId,
-                        audioFileId,
-                      });
+                      if (process.env.NODE_ENV === 'development') {
+                        console.log('[ReaderView Phase 4] First chunk ready, starting progressive playback', {
+                          chapterId,
+                          audioFileId,
+                        });
+                      }
 
                       // Switch to progressive player
                       setIsProgressiveAudio(true);
@@ -556,6 +561,8 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
                   }
                 } catch (error) {
                   console.error('[TTS Phase 3] Audio generation error:', error);
+                  // Reset progressive flag on error to prevent wrong player selection on retry
+                  setIsProgressiveAudio(false);
                 } finally {
                   // Always cleanup, even on error - CRITICAL FIX
                   setGeneratingChapters(prev => {
@@ -577,8 +584,13 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
                 if (chapter.id) {
                   const audioFile = await getAudioFile(chapter.id);
                   if (audioFile) {
-                    setIsProgressiveAudio(audioFile.isProgressive || false);
-                    console.log('[ReaderView Phase 4] Audio type:', audioFile.isProgressive ? 'progressive' : 'single-blob');
+                    // Use flushSync to ensure state update happens before setCurrentAudioChapter
+                    flushSync(() => {
+                      setIsProgressiveAudio(audioFile.isProgressive || false);
+                    });
+                    if (process.env.NODE_ENV === 'development') {
+                      console.log('[ReaderView Phase 4] Audio type:', audioFile.isProgressive ? 'progressive' : 'single-blob');
+                    }
                   }
                 }
 
@@ -667,6 +679,7 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
           isProgressive={isProgressiveAudio}
           chunksLoaded={isProgressiveAudio ? progressiveAudioPlayer.chunksLoaded : 0}
           totalChunks={isProgressiveAudio ? progressiveAudioPlayer.totalChunks : 0}
+          currentPlayingChunk={isProgressiveAudio ? progressiveAudioPlayer.currentPlayingChunk : 0}
           isGenerating={isProgressiveAudio ? progressiveAudioPlayer.isGenerating : false}
           error={audioPlayer.error || null}
         />

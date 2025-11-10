@@ -23,6 +23,7 @@ interface AudioPlayerProps {
   isProgressive?: boolean;
   chunksLoaded?: number;
   totalChunks?: number;
+  currentPlayingChunk?: number;
   isGenerating?: boolean;
   error?: string | null;
 }
@@ -46,6 +47,7 @@ export default function AudioPlayer({
   isProgressive = false,
   chunksLoaded = 0,
   totalChunks = 0,
+  currentPlayingChunk = 0,
   isGenerating = false,
   error = null,
 }: AudioPlayerProps) {
@@ -108,7 +110,15 @@ export default function AudioPlayer({
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
         {/* Progress Bar */}
-        <div className="relative mb-3">
+        <div className="relative mb-3 group">
+          {/* Hidden live region for screen readers */}
+          <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+            {isGenerating
+              ? `Generating audio: ${Math.round((chunksLoaded / totalChunks) * 100)}% complete. ${chunksLoaded} of ${totalChunks} chunks loaded.`
+              : `Playing: ${Math.round(progress)}% complete.`
+            }
+          </div>
+
           <div
             className="relative h-1 bg-gray-200 dark:bg-gray-700 rounded-full cursor-pointer"
             onMouseDown={isGenerating ? undefined : handleSeekStart}
@@ -121,12 +131,16 @@ export default function AudioPlayer({
             aria-valuemin={0}
             aria-valuemax={100}
             aria-disabled={isGenerating}
+            aria-describedby={isGenerating ? "seek-disabled-reason" : undefined}
           >
             {/* Generation Progress (behind playback progress) */}
-            {isGenerating && totalChunks > 0 && (
+            {isProgressive && totalChunks > 0 && (
               <div
-                className="absolute h-full bg-sky-300 dark:bg-sky-700 rounded-full transition-all"
-                style={{ width: `${(chunksLoaded / totalChunks) * 100}%` }}
+                className="absolute h-full bg-sky-300 dark:bg-sky-700 rounded-full transition-all duration-500"
+                style={{
+                  width: `${(chunksLoaded / totalChunks) * 100}%`,
+                  opacity: isGenerating ? 1 : 0.3
+                }}
               />
             )}
 
@@ -147,7 +161,10 @@ export default function AudioPlayer({
 
           {/* Seeking disabled tooltip */}
           {isGenerating && (
-            <div className="absolute -top-8 left-1/2 -translate-x-1/2 px-3 py-1 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
+            <div
+              id="seek-disabled-reason"
+              className="absolute -top-8 left-1/2 -translate-x-1/2 px-3 py-1 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap"
+            >
               Seeking available after generation completes
             </div>
           )}
@@ -179,15 +196,15 @@ export default function AudioPlayer({
                 <p className="text-xs text-gray-400 dark:text-gray-500">
                   {isGenerating ? (
                     <>
-                      Playing chunk {Math.min(chunksLoaded, totalChunks)}/{totalChunks}
+                      Playing chunk {currentPlayingChunk + 1}/{totalChunks}
                       {chunksLoaded < totalChunks && (
                         <span className="ml-1 text-sky-600 dark:text-sky-400">
-                          • Generating {chunksLoaded + 1}/{totalChunks}
+                          • Generating {chunksLoaded}/{totalChunks}
                         </span>
                       )}
                     </>
                   ) : (
-                    `${totalChunks} chunks loaded`
+                    `Playing chunk ${currentPlayingChunk + 1}/${totalChunks}`
                   )}
                 </p>
               )}
