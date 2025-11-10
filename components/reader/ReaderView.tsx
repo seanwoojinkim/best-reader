@@ -430,6 +430,10 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
               onPlayAudio={(chapter) => {
                 setCurrentAudioChapter(chapter);
                 setShowChapterList(false);
+                // Navigate to the chapter when playing audio
+                if (goToLocation && chapter.cfiStart) {
+                  goToLocation(chapter.cfiStart);
+                }
               }}
               generatingChapters={generatingChapters}
             />
