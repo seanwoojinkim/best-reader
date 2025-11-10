@@ -2,15 +2,15 @@ import { NextRequest } from 'next/server';
 import OpenAI from 'openai';
 import type { OpenAIVoice } from '@/types';
 
-// Validate API key is configured
-if (!process.env.OPENAI_API_KEY) {
-  console.error('OPENAI_API_KEY is not configured in environment variables');
+// Initialize OpenAI client lazily to avoid build-time errors
+function getOpenAIClient() {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error('OPENAI_API_KEY is not configured in environment variables');
+  }
+  return new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
 }
-
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 export async function POST(request: NextRequest) {
   const encoder = new TextEncoder();
@@ -169,6 +169,7 @@ export async function POST(request: NextRequest) {
 
             console.log(`[TTS API Stream] Generating chunk ${i + 1}/${totalChunks} (${chunks[i].length} chars)`);
 
+            const openai = getOpenAIClient();
             const response = await openai.audio.speech.create({
               model: 'tts-1',
               voice: voice,

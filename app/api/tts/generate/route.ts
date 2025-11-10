@@ -2,15 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import type { OpenAIVoice } from '@/types';
 
-// Validate API key is configured
-if (!process.env.OPENAI_API_KEY) {
-  console.error('OPENAI_API_KEY is not configured in environment variables');
+// Initialize OpenAI client lazily to avoid build-time errors
+function getOpenAIClient() {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error('OPENAI_API_KEY is not configured in environment variables');
+  }
+  return new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
 }
-
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 export async function POST(request: NextRequest) {
   try {
@@ -84,6 +84,8 @@ export async function POST(request: NextRequest) {
     // Generate audio for each chunk and concatenate
     const audioBuffers: Buffer[] = [];
     const totalChunks = chunks.length;
+
+    const openai = getOpenAIClient();
 
     for (let i = 0; i < chunks.length; i++) {
       console.log(`[TTS API] Generating chunk ${i + 1}/${totalChunks} (${chunks[i].length} chars)`);
