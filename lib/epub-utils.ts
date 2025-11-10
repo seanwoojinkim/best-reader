@@ -171,18 +171,33 @@ export async function extractChapters(
 
         // Generate proper CFI for this section
         // This ensures navigation will work reliably with rendition.display()
+        let extractedCfi = null;
+
         if ((section as any).cfiBase) {
-          // Use the section's cfiBase which is a proper EPUB CFI
-          cfiStart = (section as any).cfiBase;
-          console.log('[extractChapters] Using cfiBase for:', item.label, '→', cfiStart);
+          extractedCfi = (section as any).cfiBase;
+          console.log('[extractChapters] Found cfiBase:', extractedCfi);
         } else if ((section as any).href) {
-          // Fallback to the section's canonical href from the spine
-          cfiStart = (section as any).href;
-          console.log('[extractChapters] Using spine href for:', item.label, '→', cfiStart);
+          extractedCfi = (section as any).href;
+          console.log('[extractChapters] Found href:', extractedCfi);
         } else if ((section as any).url) {
-          // Some versions use 'url' instead of 'href'
-          cfiStart = (section as any).url;
-          console.log('[extractChapters] Using spine url for:', item.label, '→', cfiStart);
+          extractedCfi = (section as any).url;
+          console.log('[extractChapters] Found url:', extractedCfi);
+        }
+
+        if (extractedCfi) {
+          // Ensure it's a complete CFI or href, not a partial CFI
+          if (extractedCfi.startsWith('epubcfi(')) {
+            // Already a complete CFI
+            cfiStart = extractedCfi;
+          } else if (extractedCfi.startsWith('/')) {
+            // Partial CFI like "/6/10" - wrap it with epubcfi()
+            cfiStart = `epubcfi(${extractedCfi})`;
+            console.log('[extractChapters] Wrapped partial CFI:', cfiStart);
+          } else {
+            // It's an href like "ch01.xhtml" or "OEBPS/Text/ch01.xhtml"
+            cfiStart = extractedCfi;
+          }
+          console.log('[extractChapters] Using for:', item.label, '→', cfiStart);
         } else {
           console.warn('[extractChapters] No cfiBase/href/url found, using TOC href:', item.href);
         }
