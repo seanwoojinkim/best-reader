@@ -6,12 +6,15 @@ import type { Book } from '@/types';
 import BookGrid from '@/components/library/BookGrid';
 import EmptyState from '@/components/library/EmptyState';
 import UploadButton from '@/components/library/UploadButton';
+import SearchButton from '@/components/library/SearchButton';
+import SearchModal from '@/components/library/SearchModal';
 import OnboardingFlow from '@/components/library/OnboardingFlow';
 import { useOnboarding } from '@/hooks/useOnboarding';
 
 export default function LibraryPage() {
   const [books, setBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showSearchModal, setShowSearchModal] = useState(false);
 
   // Phase 3: Onboarding flow
   const { showOnboarding, isChecking, completeOnboarding, skipOnboarding } = useOnboarding();
@@ -48,7 +51,10 @@ export default function LibraryPage() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
             <div className="flex items-center justify-between">
               <h1 className="text-3xl font-serif font-bold text-gray-900 dark:text-gray-100">Library</h1>
-              <UploadButton onUploadComplete={handleUploadComplete} />
+              <div className="flex gap-3">
+                <SearchButton onClick={() => setShowSearchModal(true)} />
+                <UploadButton onUploadComplete={handleUploadComplete} />
+              </div>
             </div>
           </div>
         </header>
@@ -87,6 +93,13 @@ export default function LibraryPage() {
             <BookGrid books={books} />
           )}
         </main>
+
+        {/* Search Modal */}
+        <SearchModal
+          isOpen={showSearchModal}
+          onClose={() => setShowSearchModal(false)}
+          onBookDownloaded={loadBooks}
+        />
       </div>
     </>
   );

@@ -10,6 +10,8 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
+    "@types/cheerio": "^0.22.35",
+    "cheerio": "^1.1.2",
     "compromise": "^14.14.4",
     "dexie": "^4.0.11",
     "dexie-react-hooks": "^1.1.7",
