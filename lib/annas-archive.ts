@@ -1,4 +1,5 @@
 import * as cheerio from 'cheerio';
+import { CapacitorHttp } from '@capacitor/core';
 import type { AnnaSearchResult, AnnaDownloadResponse } from '@/types/annas-archive';
 
 const ANNAS_SEARCH_ENDPOINT = 'https://annas-archive.org/search?q=';
@@ -6,9 +7,55 @@ const ANNAS_DOWNLOAD_ENDPOINT = 'https://annas-archive.org/dyn/api/fast_download
 const TIMEOUT_MS = 30000; // 30 seconds
 
 /**
- * Fetch with timeout support
+ * Detect if we're running in Capacitor (native app)
  */
-async function fetchWithTimeout(url: string, options: RequestInit = {}): Promise<Response> {
+function isCapacitor(): boolean {
+  return !!(window as any).Capacitor;
+}
+
+/**
+ * Fetch with timeout support - uses Capacitor HTTP for native, fetch for web
+ */
+async function fetchWithTimeout(url: string, options: RequestInit = {}, isBinaryDownload = false): Promise<Response> {
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.5',
+    'DNT': '1',
+    'Connection': 'keep-alive',
+    'Upgrade-Insecure-Requests': '1',
+    ...options.headers,
+  };
+
+  // Use Capacitor HTTP in native app to bypass CORS
+  if (isCapacitor()) {
+    try {
+      const capOptions: any = {
+        url,
+        headers: headers as Record<string, string>,
+        connectTimeout: TIMEOUT_MS,
+        readTimeout: TIMEOUT_MS,
+      };
+
+      // For binary downloads (EPUB files), use blob response type
+      if (isBinaryDownload) {
+        capOptions.responseType = 'blob';
+      }
+
+      const response = await CapacitorHttp.get(capOptions);
+
+      // Convert Capacitor response to fetch Response format
+      return new Response(response.data, {
+        status: response.status,
+        statusText: response.status === 200 ? 'OK' : 'Error',
+        headers: response.headers as HeadersInit,
+      });
+    } catch (error: any) {
+      throw new Error(error.message || 'Request failed');
+    }
+  }
+
+  // Use regular fetch for web
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
@@ -16,6 +63,7 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}): Promise
     const response = await fetch(url, {
       ...options,
       signal: controller.signal,
+      headers,
     });
     clearTimeout(timeoutId);
     return response;
@@ -156,7 +204,7 @@ export async function downloadFromAnnasArchive(
   }
 
   // Step 2: Download actual file from temporary URL
-  const fileResponse = await fetchWithTimeout(data.download_url);
+  const fileResponse = await fetchWithTimeout(data.download_url, {}, true); // true = binary download
   if (!fileResponse.ok) {
     throw new Error(`Download failed: ${fileResponse.status}`);
   }

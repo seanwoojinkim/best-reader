@@ -6,6 +6,8 @@ import { TYPOGRAPHY_RANGES } from '@/lib/constants';
 import ThemeToggle from '../shared/ThemeToggle';
 import AudioSettingsPanel from './AudioSettingsPanel';
 import UsageDashboard from './UsageDashboard';
+import ApiKeySettings from '../settings/ApiKeySettings';
+import AnnasArchiveApiKeySettings from '../settings/AnnasArchiveApiKeySettings';
 import { useAudioUsage } from '@/hooks/useAudioUsage';
 import { getAudioSettings, saveAudioSettings, getDefaultAudioSettings } from '@/lib/db';
 import type { AudioSettings } from '@/types';
@@ -29,7 +31,7 @@ export default function SettingsDrawer({ isOpen, onClose, bookId }: SettingsDraw
     resetSettings,
   } = useSettingsStore();
 
-  const [activeTab, setActiveTab] = useState<'typography' | 'audio' | 'usage'>('typography');
+  const [activeTab, setActiveTab] = useState<'typography' | 'audio' | 'apikey' | 'usage'>('typography');
   const [audioSettings, setAudioSettings] = useState<AudioSettings | null>(null);
   const audioUsage = useAudioUsage({ bookId });
 
@@ -80,7 +82,7 @@ export default function SettingsDrawer({ isOpen, onClose, bookId }: SettingsDraw
       >
         <div className="flex flex-col h-full">
           {/* Header */}
-          <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700 safe-area-top">
             <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Settings</h2>
             <button
               onClick={onClose}
@@ -101,10 +103,10 @@ export default function SettingsDrawer({ isOpen, onClose, bookId }: SettingsDraw
           {/* Content */}
           <div className="flex-1 overflow-y-auto">
             {/* Tabs */}
-            <div className="flex border-b border-gray-200 dark:border-gray-700 px-6">
+            <div className="flex border-b border-gray-200 dark:border-gray-700 px-6 overflow-x-auto">
               <button
                 onClick={() => setActiveTab('typography')}
-                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                   activeTab === 'typography'
                     ? 'border-gray-900 dark:border-gray-100 text-gray-900 dark:text-gray-100'
                     : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
@@ -114,7 +116,7 @@ export default function SettingsDrawer({ isOpen, onClose, bookId }: SettingsDraw
               </button>
               <button
                 onClick={() => setActiveTab('audio')}
-                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                   activeTab === 'audio'
                     ? 'border-gray-900 dark:border-gray-100 text-gray-900 dark:text-gray-100'
                     : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
@@ -123,8 +125,18 @@ export default function SettingsDrawer({ isOpen, onClose, bookId }: SettingsDraw
                 Audio
               </button>
               <button
+                onClick={() => setActiveTab('apikey')}
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                  activeTab === 'apikey'
+                    ? 'border-gray-900 dark:border-gray-100 text-gray-900 dark:text-gray-100'
+                    : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+              >
+                API Key
+              </button>
+              <button
                 onClick={() => setActiveTab('usage')}
-                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                   activeTab === 'usage'
                     ? 'border-gray-900 dark:border-gray-100 text-gray-900 dark:text-gray-100'
                     : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
@@ -244,6 +256,15 @@ export default function SettingsDrawer({ isOpen, onClose, bookId }: SettingsDraw
                   settings={audioSettings}
                   onChange={handleAudioSettingsChange}
                 />
+              )}
+
+              {activeTab === 'apikey' && (
+                <div className="space-y-8">
+                  <ApiKeySettings />
+                  <div className="border-t border-gray-200 dark:border-gray-700 pt-8">
+                    <AnnasArchiveApiKeySettings />
+                  </div>
+                </div>
               )}
 
               {activeTab === 'usage' && (

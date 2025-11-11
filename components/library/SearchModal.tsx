@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import SearchResultCard from './SearchResultCard';
 import type { AnnaSearchResult } from '@/types/annas-archive';
+import { searchAnnasArchive, downloadFromAnnasArchive } from '@/lib/annas-archive';
+import { getAnnasArchiveApiKey } from '@/lib/api-keys';
 
 interface SearchModalProps {
   isOpen: boolean;
@@ -79,56 +81,32 @@ export default function SearchModal({
     setError(null);
 
     try {
-      const params = new URLSearchParams({ q: query });
-      // No format parameter needed - API always returns EPUB-only
+      // Call Anna's Archive directly from client
+      const results = await searchAnnasArchive(query, 'epub');
+      setResults(results);
+    } catch (err: any) {
+      console.error('[Search] Error:', err);
 
-      const response = await fetch(`/api/books/search?${params.toString()}`);
-      const data = await response.json();
+      // Categorize error
+      let errorState: ErrorState;
 
-      if (!response.ok || !data.success) {
-        // Categorize error based on response
-        let errorState: ErrorState;
-
-        if (data.errorType === 'rate_limit') {
-          errorState = {
-            message: data.error || 'Too many search requests. Please wait before searching again.',
-            type: ErrorType.RATE_LIMIT,
-            retryAfter: data.retryAfter,
-          };
-        } else if (data.errorType === 'timeout') {
-          errorState = {
-            message: data.error || 'Search request timed out. Please try again.',
-            type: ErrorType.TIMEOUT,
-          };
-        } else if (data.errorType === 'network') {
-          errorState = {
-            message: data.error || 'Network error. Please check your connection and try again.',
-            type: ErrorType.NETWORK,
-          };
-        } else if (data.errorType === 'validation') {
-          errorState = {
-            message: data.error || 'Invalid search query.',
-            type: ErrorType.VALIDATION,
-          };
-        } else {
-          errorState = {
-            message: data.error || 'Search failed. Please try again.',
-            type: ErrorType.UNKNOWN,
-          };
-        }
-
-        setError(errorState);
-        setResults([]);
-        return;
+      if (err.message?.includes('timeout') || err.message?.includes('timed out')) {
+        errorState = {
+          message: 'Search request timed out. Please try again.',
+          type: ErrorType.TIMEOUT,
+        };
+      } else if (err.message?.includes('network') || err.message?.includes('Failed to fetch')) {
+        errorState = {
+          message: 'Network error. Please check your internet connection and try again.',
+          type: ErrorType.NETWORK,
+        };
+      } else {
+        errorState = {
+          message: err.message || 'Search failed. Please try again.',
+          type: ErrorType.UNKNOWN,
+        };
       }
 
-      setResults(data.results);
-    } catch (err: any) {
-      // Handle network errors that don't reach the API
-      const errorState: ErrorState = {
-        message: 'Network error. Please check your internet connection and try again.',
-        type: ErrorType.NETWORK,
-      };
       setError(errorState);
       setResults([]);
     } finally {
@@ -141,24 +119,15 @@ export default function SearchModal({
     setError(null);
 
     try {
-      // Step 1: Download file from API
-      const response = await fetch('/api/books/download', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          hash: book.hash,
-          title: book.title,
-          format: book.format,
-        }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Download failed');
+      // Check if Anna's Archive API key is configured
+      const annasApiKey = await getAnnasArchiveApiKey();
+      if (!annasApiKey) {
+        throw new Error('Anna\'s Archive API key not configured. Please add your API key in settings.');
       }
 
-      // Get blob from response
-      const blob = await response.blob();
+      // Step 1: Download file directly from Anna's Archive
+      console.log('[Download] Downloading from Anna\'s Archive:', book.title);
+      const blob = await downloadFromAnnasArchive(book.hash, annasApiKey);
       console.log('[Download] Received blob:', blob.size, 'bytes');
 
       // Step 2: Load EPUB and extract metadata

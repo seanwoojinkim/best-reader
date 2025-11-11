@@ -4,6 +4,7 @@ import { saveAudioFile, logAudioUsage, saveSentenceSyncData } from '@/lib/db';
 import { getChapterText } from '@/lib/epub-utils';
 import { parseChapterIntoSentences } from '@/lib/sentence-parser';
 import { generateSentenceTimestamps } from '@/lib/duration-estimator';
+import { generateTTS, hasApiKey } from '@/lib/tts-client';
 import type { Book as EpubBook } from 'epubjs';
 
 interface UseAudioGenerationProps {
@@ -45,6 +46,13 @@ export function useAudioGeneration({ book }: UseAudioGenerationProps): UseAudioG
       return null;
     }
 
+    // Check if API key is configured
+    const keyConfigured = await hasApiKey();
+    if (!keyConfigured) {
+      setError('OpenAI API key not configured. Please add your API key in settings.');
+      return null;
+    }
+
     setGenerating(true);
     setProgress(10);
     setError(null);
@@ -64,100 +72,49 @@ export function useAudioGeneration({ book }: UseAudioGenerationProps): UseAudioG
         throw new Error('Generation cancelled');
       }
 
-      // Step 2: Call streaming API (10% -> 90%)
-      console.log('[useAudioGeneration] Calling streaming TTS API...', {
+      // Step 2: Generate TTS audio client-side (10% -> 90%)
+      console.log('[useAudioGeneration] Generating TTS audio client-side...', {
         voice,
-        voiceType: typeof voice,
         speed,
         textLength: chapterText.length
       });
 
-      const requestBody = {
-        chapterText,
+      const result = await generateTTS({
+        text: chapterText,
         voice,
         speed,
-      };
-      console.log('[useAudioGeneration] Request body:', JSON.stringify(requestBody).substring(0, 200));
-
-      const response = await fetch('/api/tts/generate-stream', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody),
-        signal: controller.signal,
+        onProgress: (progress, message) => {
+          // Map client progress (0-100) to our progress range (10-90)
+          const mappedProgress = 10 + (progress * 0.8);
+          setProgress(mappedProgress);
+          if (onProgress) onProgress(mappedProgress, message);
+        },
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to generate audio');
+      if (!result.success || !result.audioData) {
+        throw new Error(result.error || 'Failed to generate audio');
       }
 
-      // Read the streaming response
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-
-      if (!reader) {
-        throw new Error('Failed to read streaming response');
+      if (controller.signal.aborted) {
+        throw new Error('Generation cancelled');
       }
 
-      let buffer = '';
-      let resultData: any = null;
+      // Destructure after validation - TypeScript can narrow these types
+      const { audioData, duration, cost, charCount, sizeBytes, voice: resultVoice, speed: resultSpeed } = result;
 
-      while (true) {
-        const { done, value } = await reader.read();
-
-        if (done) break;
-        if (controller.signal.aborted) {
-          reader.cancel();
-          throw new Error('Generation cancelled');
-        }
-
-        buffer += decoder.decode(value, { stream: true });
-
-        // Process complete SSE messages
-        const lines = buffer.split('\n\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          if (!line.trim()) continue;
-
-          const eventMatch = line.match(/^event: (\w+)\ndata: ([\s\S]+)$/);
-          if (!eventMatch) continue;
-
-          const [, eventType, dataStr] = eventMatch;
-          const data = JSON.parse(dataStr);
-
-          if (eventType === 'progress') {
-            setProgress(data.progress);
-            if (onProgress) onProgress(data.progress, data.message);
-            console.log(`[useAudioGeneration] Progress: ${data.progress}% - ${data.message}`);
-          } else if (eventType === 'result') {
-            resultData = data;
-          } else if (eventType === 'error') {
-            throw new Error(data.error);
-          }
-        }
-      }
-
-      if (!resultData || !resultData.success) {
-        throw new Error('No result data received from streaming API');
-      }
-
-      const data = resultData;
-
-      // Step 3: Convert base64 to Blob (80% -> 90%)
-      const audioBlob = base64ToBlob(data.audioData, 'audio/mpeg');
-
+      // Step 3: Convert base64 to Blob (90%)
+      const audioBlob = base64ToBlob(audioData, 'audio/mpeg');
       setProgress(90);
 
       // Step 4: Save to IndexedDB (90% -> 100%)
       const audioFile: Omit<AudioFile, 'id'> = {
         chapterId: chapter.id,
         blob: audioBlob,
-        duration: data.duration,
-        voice: data.voice,
-        speed: data.speed,
+        duration: duration!,
+        voice: resultVoice!,
+        speed: resultSpeed!,
         generatedAt: new Date(),
-        sizeBytes: data.sizeBytes,
+        sizeBytes: sizeBytes!,
       };
 
       const audioFileId = await saveAudioFile(audioFile);
@@ -166,9 +123,9 @@ export function useAudioGeneration({ book }: UseAudioGenerationProps): UseAudioG
       await logAudioUsage({
         chapterId: chapter.id,
         bookId: chapter.bookId,
-        charCount: data.charCount,
-        cost: data.cost,
-        voice: data.voice,
+        charCount: charCount!,
+        cost: cost!,
+        voice: resultVoice!,
         timestamp: new Date(),
       });
 
@@ -183,7 +140,7 @@ export function useAudioGeneration({ book }: UseAudioGenerationProps): UseAudioG
 
         const sentenceMetadata = generateSentenceTimestamps(
           parsedSentences,
-          data.duration
+          duration!
         );
 
         await saveSentenceSyncData({

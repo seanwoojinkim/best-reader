@@ -29,7 +29,7 @@ export default function BookCard({ book }: BookCardProps) {
 
   return (
     <Link
-      href={`/reader/${book.id}`}
+      href={`/reader?id=${book.id}`}
       className="group block transition-transform duration-200 hover:scale-105"
     >
       <div className="relative aspect-[2/3] bg-gray-100 rounded-lg overflow-hidden shadow-md mb-3">

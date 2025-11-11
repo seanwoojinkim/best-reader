@@ -77,7 +77,7 @@ export default function AudioPlayer({
   };
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-30 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 shadow-lg">
+    <div className="fixed bottom-0 left-0 right-0 z-30 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 shadow-lg safe-area-bottom">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
         {/* Progress Bar */}
         <div

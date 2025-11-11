@@ -348,7 +348,7 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
       <div
         className={`
           absolute top-0 left-0 right-0 z-10 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm border-b border-gray-200 dark:border-gray-700
-          transition-transform duration-300
+          transition-transform duration-300 safe-area-top
           ${showControls ? 'translate-y-0' : '-translate-y-full'}
         `}
       >
@@ -454,7 +454,7 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
             onClick={() => setShowChapterList(false)}
           />
           <div className="fixed left-0 top-0 bottom-0 w-full md:w-80 bg-white dark:bg-gray-900 shadow-xl z-50 overflow-y-auto">
-            <div className="sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 p-4 flex items-center justify-between">
+            <div className="sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 p-4 flex items-center justify-between safe-area-top">
               <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Chapters</h2>
               <button
                 onClick={() => setShowChapterList(false)}

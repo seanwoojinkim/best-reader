@@ -23,7 +23,7 @@ export default function ProgressIndicators({
       <div
         className={`
           absolute bottom-0 left-0 right-0 z-10 h-1 bg-gray-200 dark:bg-gray-700
-          transition-opacity duration-300
+          transition-opacity duration-300 safe-area-bottom
           ${showControls ? 'opacity-100' : 'opacity-0'}
         `}
         role="progressbar"
