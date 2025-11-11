@@ -42,20 +42,45 @@ export default function ReaderPage() {
 
     const loadBook = async () => {
       try {
+        console.log('[ReaderPage.loadBook] Loading book with ID:', bookId);
+
         // Get book from database
         const bookData = await getBook(bookId);
+        console.log('[ReaderPage.loadBook] Book retrieved from DB:', {
+          id: bookData?.id,
+          title: bookData?.title,
+          hasFileBlob: !!bookData?.fileBlob,
+          fileBlobType: bookData?.fileBlob?.constructor.name,
+          fileBlobSize: bookData?.fileBlob?.size,
+        });
+
         if (!bookData) {
+          console.error('[ReaderPage.loadBook] Book not found in database');
           setError('Book not found');
           setLoading(false);
           return;
         }
 
-        if (!bookData.fileBlob) {
+        // Check for fileBuffer (preferred for iOS) or fileBlob (fallback)
+        if (!bookData.fileBuffer && !bookData.fileBlob) {
+          console.error('[ReaderPage.loadBook] Book found but no file data (neither fileBuffer nor fileBlob)');
           setError('Book file not found');
           setLoading(false);
           return;
         }
 
+        console.log('[ReaderPage.loadBook] File data available:', {
+          hasFileBuffer: !!bookData.fileBuffer,
+          fileBufferSize: bookData.fileBuffer?.byteLength,
+          hasFileBlob: !!bookData.fileBlob,
+          fileBlobSize: bookData.fileBlob?.size,
+        });
+
+        // Determine which source will be used for the book
+        const willUseBuffer = !!bookData.fileBuffer;
+        console.log('[ReaderPage.loadBook] Will use:', willUseBuffer ? 'fileBuffer (creating fresh Blob)' : 'fileBlob (may be invalid)');
+
+        console.log('[ReaderPage.loadBook] Setting book state');
         setBook(bookData);
 
         // Get saved reading position
@@ -128,7 +153,7 @@ export default function ReaderPage() {
     );
   }
 
-  if (error || !book || !book.fileBlob) {
+  if (error || !book || (!book.fileBuffer && !book.fileBlob)) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
@@ -163,7 +188,11 @@ export default function ReaderPage() {
 
       <ReaderView
         bookId={bookId!}
-        bookBlob={book.fileBlob}
+        bookBlob={
+          (book.fileBuffer ? new Blob([book.fileBuffer], { type: 'application/epub+zip' }) : null) ||
+          book.fileBlob ||
+          null!
+        }
         initialCfi={position?.cfi}
       />
     </>

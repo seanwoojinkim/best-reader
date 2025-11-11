@@ -81,6 +81,7 @@ body.theme-sepia {
   width: 100%;
   height: 100%;
   position: relative;
+  /* Safe area is handled by parent container */
 }
 
 .epub-view {

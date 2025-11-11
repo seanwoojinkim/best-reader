@@ -167,13 +167,18 @@ export default function SearchModal({
       // Step 3: Save to library database
       const { addBook } = await import('@/lib/db');
 
+      // Convert cover to ArrayBuffer for iOS compatibility
+      const coverBuffer = coverBlob ? await coverBlob.arrayBuffer() : undefined;
+
       const bookData = {
         title: metadata.title || book.title,
         author: metadata.creator || book.authors || 'Unknown Author',
         filePath: '', // Will be set by addBook
         fileBlob: blob,
+        fileBuffer: arrayBuffer, // Store ArrayBuffer for iOS compatibility
         coverUrl: coverUrl || undefined,
         coverBlob: coverBlob || undefined,
+        coverBuffer: coverBuffer,
         isbn: metadata.identifier || undefined,
         tags: ['downloaded'] as string[], // Tag for tracking source
       };

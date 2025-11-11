@@ -50,6 +50,8 @@ export function useAudioPlayer({
 
     const handleLoadedMetadata = () => {
       console.log('[useAudioPlayer] loadedmetadata event fired, duration:', audio.duration, 'src:', audio.src);
+      console.log('[useAudioPlayer] Audio readyState:', audio.readyState);
+      console.log('[useAudioPlayer] Audio networkState:', audio.networkState);
       setDuration(audio.duration);
       setLoading(false);
     };
@@ -114,7 +116,13 @@ export function useAudioPlayer({
         throw new Error('Audio not generated for this chapter');
       }
 
-      console.log('[useAudioPlayer] Audio blob size:', audioFile.blob.size, 'type:', audioFile.blob.type);
+      console.log('[useAudioPlayer] Audio file data:', {
+        hasBuffer: !!audioFile.buffer,
+        bufferSize: audioFile.buffer?.byteLength,
+        hasBlob: !!audioFile.blob,
+        blobSize: audioFile.blob?.size,
+        blobType: audioFile.blob?.type
+      });
 
       // Revoke previous object URL to prevent memory leak
       if (currentObjectUrlRef.current) {
@@ -123,8 +131,18 @@ export function useAudioPlayer({
         currentObjectUrlRef.current = null;
       }
 
+      // Prefer ArrayBuffer (iOS compatible) over Blob (may be invalid on iOS)
+      let audioBlob: Blob;
+      if (audioFile.buffer) {
+        console.log('[useAudioPlayer] Using ArrayBuffer to create fresh Blob for iOS compatibility');
+        audioBlob = new Blob([audioFile.buffer], { type: 'audio/mpeg' });
+      } else {
+        console.log('[useAudioPlayer] No ArrayBuffer, falling back to stored Blob (may fail on iOS)');
+        audioBlob = audioFile.blob;
+      }
+
       // Create object URL from blob
-      const audioUrl = URL.createObjectURL(audioFile.blob);
+      const audioUrl = URL.createObjectURL(audioBlob);
       currentObjectUrlRef.current = audioUrl; // Store for later cleanup
       console.log('[useAudioPlayer] Object URL created:', audioUrl);
 
@@ -134,9 +152,16 @@ export function useAudioPlayer({
       audioRef.current.playbackRate = playbackSpeed;
 
       console.log('[useAudioPlayer] Audio src set, calling load()');
+      console.log('[useAudioPlayer] Audio element state before load:', {
+        src: audioRef.current.src,
+        readyState: audioRef.current.readyState,
+        networkState: audioRef.current.networkState
+      });
 
       // Wait for audio to load before marking as ready
       audioRef.current.load();
+
+      console.log('[useAudioPlayer] load() called, waiting for loadedmetadata event...');
 
       // Don't revoke the object URL immediately - the audio element needs it!
       // It will be cleaned up when the component unmounts or a new chapter loads
@@ -155,7 +180,15 @@ export function useAudioPlayer({
   }, [chapter, loadChapter]);
 
   const play = useCallback(() => {
-    console.log('[useAudioPlayer] Play called', { hasAudio: !!audioRef.current, loading, src: audioRef.current?.src });
+    console.log('[useAudioPlayer] Play called', {
+      hasAudio: !!audioRef.current,
+      loading,
+      src: audioRef.current?.src,
+      readyState: audioRef.current?.readyState,
+      networkState: audioRef.current?.networkState,
+      paused: audioRef.current?.paused,
+      duration: audioRef.current?.duration
+    });
 
     if (!audioRef.current) {
       console.error('[useAudioPlayer] No audio element');
@@ -173,6 +206,7 @@ export function useAudioPlayer({
       return;
     }
 
+    console.log('[useAudioPlayer] Calling play() on audio element...');
     const playPromise = audioRef.current.play();
 
     if (playPromise !== undefined) {
@@ -184,12 +218,19 @@ export function useAudioPlayer({
         })
         .catch((err) => {
           // Handle play() errors gracefully
+          console.error('[useAudioPlayer] Audio play error:', {
+            name: err.name,
+            message: err.message,
+            code: err.code,
+            stack: err.stack
+          });
           if (err.name !== 'AbortError') {
-            console.error('[useAudioPlayer] Audio play error:', err);
-            setError('Failed to play audio');
+            setError('Failed to play audio: ' + err.message);
           }
           setPlaying(false);
         });
+    } else {
+      console.log('[useAudioPlayer] play() returned undefined (old browsers)');
     }
   }, [loading]);
 

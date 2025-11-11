@@ -35,8 +35,12 @@ export default function UploadButton({ onUploadComplete }: UploadButtonProps) {
       setUploadStatus('processing');
       const metadata = await extractEpubMetadata(file);
 
-      // Convert file to blob for storage
-      const blob = new Blob([await file.arrayBuffer()], { type: 'application/epub+zip' });
+      // Convert file to both ArrayBuffer and Blob for storage
+      const arrayBuffer = await file.arrayBuffer();
+      const blob = new Blob([arrayBuffer], { type: 'application/epub+zip' });
+
+      // Convert cover to ArrayBuffer if present
+      const coverBuffer = metadata.coverBlob ? await metadata.coverBlob.arrayBuffer() : undefined;
 
       // Add book to database
       setUploadStatus('saving');
@@ -46,7 +50,9 @@ export default function UploadButton({ onUploadComplete }: UploadButtonProps) {
         filePath: '', // Will store blob directly
         coverUrl: metadata.coverUrl,
         coverBlob: metadata.coverBlob,
+        coverBuffer: coverBuffer,
         fileBlob: blob,
+        fileBuffer: arrayBuffer,
       });
 
       // Reset input

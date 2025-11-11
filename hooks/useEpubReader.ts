@@ -30,12 +30,24 @@ export function useEpubReader({
 
     const initBook = async () => {
       try {
+        console.log('[useEpubReader.initBook] Starting book initialization');
+        console.log('[useEpubReader.initBook] bookBlob type:', bookBlob?.constructor.name);
+        console.log('[useEpubReader.initBook] bookBlob size:', bookBlob?.size);
+
+        console.log('[useEpubReader.initBook] Calling arrayBuffer()...');
         const arrayBuffer = await bookBlob.arrayBuffer();
+        console.log('[useEpubReader.initBook] arrayBuffer() succeeded! size:', arrayBuffer.byteLength);
+
         const epubBook = ePub(arrayBuffer);
+        console.log('[useEpubReader.initBook] ePub book created successfully');
+
         setBook(epubBook);
         setLoading(false);
       } catch (error) {
-        console.error('Error initializing book:', error);
+        console.error('[useEpubReader.initBook] Error initializing book:', error);
+        console.error('[useEpubReader.initBook] Error type:', error?.constructor?.name);
+        console.error('[useEpubReader.initBook] Error message:', (error as Error)?.message);
+        console.error('[useEpubReader.initBook] Error stack:', (error as Error)?.stack);
         setLoading(false);
       }
     };

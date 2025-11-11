@@ -102,14 +102,20 @@ export function useAudioGeneration({ book }: UseAudioGenerationProps): UseAudioG
       // Destructure after validation - TypeScript can narrow these types
       const { audioData, duration, cost, charCount, sizeBytes, voice: resultVoice, speed: resultSpeed } = result;
 
-      // Step 3: Convert base64 to Blob (90%)
+      // Step 3: Convert base64 to ArrayBuffer only (90%)
+      console.log('[useAudioGeneration] Converting audio to ArrayBuffer for iOS compatibility...');
       const audioBlob = base64ToBlob(audioData, 'audio/mpeg');
+      const audioBuffer = await audioBlob.arrayBuffer(); // Store ArrayBuffer for iOS persistence
+      console.log('[useAudioGeneration] Audio buffer size:', audioBuffer.byteLength);
       setProgress(90);
 
-      // Step 4: Save to IndexedDB (90% -> 100%)
+      // Step 4: Save to IndexedDB with only ArrayBuffer (90% -> 100%)
+      // Note: We create a temporary Blob just for type compatibility, but only store the buffer
+      const tempBlob = new Blob([audioBuffer], { type: 'audio/mpeg' });
       const audioFile: Omit<AudioFile, 'id'> = {
         chapterId: chapter.id,
-        blob: audioBlob,
+        blob: tempBlob, // Temporary Blob for compatibility (not persisted properly on iOS)
+        buffer: audioBuffer, // ONLY this persists on iOS - 37MB instead of 74MB
         duration: duration!,
         voice: resultVoice!,
         speed: resultSpeed!,
@@ -117,6 +123,7 @@ export function useAudioGeneration({ book }: UseAudioGenerationProps): UseAudioG
         sizeBytes: sizeBytes!,
       };
 
+      console.log('[useAudioGeneration] Saving audio file to IndexedDB (ArrayBuffer only for iOS)...');
       const audioFileId = await saveAudioFile(audioFile);
 
       // Log usage

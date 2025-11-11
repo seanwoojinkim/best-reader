@@ -5,13 +5,15 @@ export interface Book {
   author: string;
   filePath: string; // Blob URL or IndexedDB reference
   coverUrl?: string;
-  coverBlob?: Blob; // Store the actual cover image data
+  coverBlob?: Blob; // Store the actual cover image data (kept as Blob for compatibility)
+  coverBuffer?: ArrayBuffer; // Store cover as ArrayBuffer for iOS compatibility
   isbn?: string;
   tags?: string[];
   addedAt: Date;
   lastOpenedAt?: Date;
   totalPages?: number;
-  fileBlob?: Blob; // Store the actual EPUB file
+  fileBlob?: Blob; // Store the actual EPUB file (deprecated - use fileBuffer)
+  fileBuffer?: ArrayBuffer; // Store EPUB as ArrayBuffer for iOS compatibility
 }
 
 // Reading position interface
@@ -90,7 +92,8 @@ export interface Chapter {
 export interface AudioFile {
   id?: number;
   chapterId: number;
-  blob: Blob;         // MP3 audio data
+  blob: Blob;         // MP3 audio data (deprecated - use buffer)
+  buffer?: ArrayBuffer; // MP3 audio data as ArrayBuffer for iOS compatibility
   duration: number;   // Seconds
   voice: OpenAIVoice;
   speed: number;

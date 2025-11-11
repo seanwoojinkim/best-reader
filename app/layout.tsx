@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import ThemeProvider from "@/components/shared/ThemeProvider";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
@@ -8,19 +8,20 @@ export const metadata: Metadata = {
   title: "Adaptive Reader",
   description: "A serene, intelligent e-reading experience",
   manifest: "/manifest.json",
-  themeColor: "#1A1A1A",
-  viewport: {
-    width: "device-width",
-    initialScale: 1,
-    maximumScale: 1,
-    userScalable: false,
-    viewportFit: "cover",
-  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
     title: "Reader",
   },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+  themeColor: "#1A1A1A",
 };
 
 export default function RootLayout({

@@ -90,7 +90,7 @@ export default function LibraryPage() {
           ) : books.length === 0 ? (
             <EmptyState />
           ) : (
-            <BookGrid books={books} />
+            <BookGrid books={books} onBookDeleted={loadBooks} />
           )}
         </main>
 
