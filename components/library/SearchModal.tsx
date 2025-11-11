@@ -38,6 +38,7 @@ export default function SearchModal({
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<ErrorState | null>(null);
   const [downloadingHash, setDownloadingHash] = useState<string | null>(null);
+  const [downloadStatus, setDownloadStatus] = useState<string>('');
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // Debounced search
@@ -126,27 +127,33 @@ export default function SearchModal({
       }
 
       // Step 1: Download file directly from Anna's Archive
+      setDownloadStatus('Downloading...');
       console.log('[Download] Downloading from Anna\'s Archive:', book.title);
       const blob = await downloadFromAnnasArchive(book.hash, annasApiKey);
       console.log('[Download] Received blob:', blob.size, 'bytes');
 
-      // Step 2: Load EPUB and extract metadata
+      // Step 2: Load EPUB and extract metadata with timeout
+      setDownloadStatus('Processing EPUB...');
       const ePub = (await import('epubjs')).default;
       const arrayBuffer = await blob.arrayBuffer();
       const epubBook = ePub(arrayBuffer);
 
+      // Timeout helper
+      const withTimeout = <T,>(promise: Promise<T>, ms: number) =>
+        Promise.race([promise, new Promise<T>((_, reject) => setTimeout(() => reject(new Error('Timeout')), ms))]);
+
       console.log('[Download] Loading EPUB metadata...');
-      await epubBook.ready;
+      await withTimeout(epubBook.ready, 10000); // 10s timeout
 
       // Extract metadata
       const metadata = await epubBook.loaded.metadata;
       console.log('[Download] Metadata:', metadata);
 
-      // Extract cover
+      // Extract cover with timeout
       let coverUrl: string | undefined;
       let coverBlob: Blob | undefined;
       try {
-        const cover = await epubBook.coverUrl();
+        const cover = await withTimeout(epubBook.coverUrl(), 5000); // 5s timeout
         coverUrl = cover || undefined;
         console.log('[Download] Cover URL:', coverUrl);
 
@@ -165,6 +172,7 @@ export default function SearchModal({
       }
 
       // Step 3: Save to library database
+      setDownloadStatus('Saving to library...');
       const { addBook } = await import('@/lib/db');
 
       // Convert cover to ArrayBuffer for iOS compatibility
@@ -233,6 +241,7 @@ export default function SearchModal({
       setError(errorState);
     } finally {
       setDownloadingHash(null);
+      setDownloadStatus('');
     }
   };
 
@@ -381,6 +390,7 @@ export default function SearchModal({
                   book={book}
                   onDownload={handleDownload}
                   isDownloading={downloadingHash === book.hash}
+                  downloadStatus={downloadingHash === book.hash ? downloadStatus : undefined}
                 />
               ))}
             </div>

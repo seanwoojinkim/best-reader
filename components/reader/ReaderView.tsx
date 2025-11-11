@@ -592,7 +592,7 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
         />
       )}
 
-      {/* Audio Player (TTS Phase 3) */}
+      {/* Audio Player (TTS Phase 3) - Hybrid with reading progress */}
       {currentAudioChapter && (
         <AudioPlayer
           chapter={currentAudioChapter}
@@ -608,16 +608,22 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
           onClose={() => setCurrentAudioChapter(null)}
           syncEnabled={syncEnabled}
           onToggleSync={() => setSyncEnabled(!syncEnabled)}
+          readingProgress={progress}
+          pagesRemaining={stats.pagesRemaining}
+          timeRemaining={stats.timeRemaining}
+          showControls={showControls}
         />
       )}
 
-      {/* Progress Indicators (Phase 3) */}
-      <ProgressIndicators
-        progress={progress}
-        pagesRemaining={stats.pagesRemaining}
-        timeRemaining={stats.timeRemaining}
-        showControls={showControls}
-      />
+      {/* Progress Indicators (Phase 3) - Hidden when audio playing (hybrid mode) */}
+      {!currentAudioChapter && (
+        <ProgressIndicators
+          progress={progress}
+          pagesRemaining={stats.pagesRemaining}
+          timeRemaining={stats.timeRemaining}
+          showControls={showControls}
+        />
+      )}
 
       {/* AI Recap (Phase 4) */}
       <AiRecap

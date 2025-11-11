@@ -44,6 +44,20 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, isBinary
 
       const response = await CapacitorHttp.get(capOptions);
 
+      // For binary downloads, Capacitor returns base64 string - decode it
+      if (isBinaryDownload && typeof response.data === 'string') {
+        const binaryString = atob(response.data);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        return new Response(bytes.buffer, {
+          status: response.status,
+          statusText: response.status === 200 ? 'OK' : 'Error',
+          headers: response.headers as HeadersInit,
+        });
+      }
+
       // Convert Capacitor response to fetch Response format
       return new Response(response.data, {
         status: response.status,

@@ -35,6 +35,7 @@ export function useAudioPlayer({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const currentObjectUrlRef = useRef<string | null>(null);
+  const loadedChapterIdRef = useRef<number | undefined>(undefined);
 
   // Initialize audio element - only create once, never recreate
   useEffect(() => {
@@ -170,11 +171,12 @@ export function useAudioPlayer({
       setError(err instanceof Error ? err.message : 'Failed to load audio');
       setLoading(false);
     }
-  }, [playbackSpeed]);
+  }, []); // Speed changes handled by setSpeed() directly, no reload needed
 
-  // Auto-load chapter when it changes
+  // Auto-load chapter when it changes (compare by ID to avoid reloading on reference changes)
   useEffect(() => {
-    if (chapter) {
+    if (chapter && chapter.id !== loadedChapterIdRef.current) {
+      loadedChapterIdRef.current = chapter.id;
       loadChapter(chapter);
     }
   }, [chapter, loadChapter]);

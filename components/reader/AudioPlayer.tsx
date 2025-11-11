@@ -18,6 +18,11 @@ interface AudioPlayerProps {
   onClose: () => void;
   syncEnabled?: boolean;
   onToggleSync?: () => void;
+  // Reading progress (hybrid feature)
+  readingProgress?: number; // 0-100
+  pagesRemaining?: number;
+  timeRemaining?: string;
+  showControls?: boolean; // Visibility control
 }
 
 const PLAYBACK_SPEEDS = [0.75, 1.0, 1.25, 1.5, 2.0];
@@ -36,6 +41,10 @@ export default function AudioPlayer({
   onClose,
   syncEnabled = true,
   onToggleSync,
+  readingProgress,
+  pagesRemaining,
+  timeRemaining,
+  showControls = true,
 }: AudioPlayerProps) {
   const [seeking, setSeeking] = useState(false);
   const [tempSeekTime, setTempSeekTime] = useState(0);
@@ -77,7 +86,7 @@ export default function AudioPlayer({
   };
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-30 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 shadow-lg safe-area-bottom">
+    <div className={`fixed bottom-0 left-0 right-0 z-30 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 shadow-lg safe-area-bottom transition-transform duration-300 ${showControls ? 'translate-y-0' : 'translate-y-full'}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
         {/* Progress Bar */}
         <div
@@ -105,31 +114,50 @@ export default function AudioPlayer({
           )}
         </div>
 
-        <div className="flex items-center justify-between">
-          {/* Left: Chapter Info */}
-          <div className="flex items-center gap-3 flex-1 min-w-0">
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-              aria-label="Close audio player"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                {chapter.title}
-              </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                {formatDuration(displayTime)} / {formatDuration(duration)}
-              </p>
-            </div>
+        {/* Reading Progress Details (Hybrid Feature) */}
+        {readingProgress !== undefined && pagesRemaining !== undefined && timeRemaining && (
+          <div className="flex items-center justify-center gap-2 text-xs text-gray-600 dark:text-gray-400 mb-2 px-2">
+            <span className="font-medium">{Math.round(readingProgress)}%</span>
+            <span className="text-gray-400 dark:text-gray-600">•</span>
+            <span>{pagesRemaining === 1 ? '1 page left' : `${pagesRemaining} pages left`}</span>
+            {pagesRemaining > 0 && (
+              <>
+                <span className="text-gray-400 dark:text-gray-600">•</span>
+                <span className="flex items-center gap-1">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  ~{timeRemaining}
+                </span>
+              </>
+            )}
           </div>
+        )}
 
-          {/* Center: Playback Controls */}
-          <div className="flex items-center gap-4">
+        {/* Chapter Info - Full Width */}
+        <div className="flex items-center gap-3 mb-3">
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+            aria-label="Close audio player"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+              {chapter.title}
+            </p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              {formatDuration(displayTime)} / {formatDuration(duration)}
+            </p>
+          </div>
+        </div>
+
+        {/* Playback Controls - Centered */}
+        <div className="flex items-center justify-center gap-4">
             {/* Speed Control */}
             <button
               onClick={cycleSpeed}
@@ -184,10 +212,6 @@ export default function AudioPlayer({
                 </svg>
               )}
             </button>
-          </div>
-
-          {/* Right: Spacer for symmetry */}
-          <div className="flex-1" />
         </div>
       </div>
     </div>
