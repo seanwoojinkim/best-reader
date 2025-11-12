@@ -10,9 +10,21 @@
 
 import OpenAI from 'openai';
 import { Preferences } from '@capacitor/preferences';
+import pLimit from 'p-limit';
 import type { OpenAIVoice } from '@/types';
 
 const API_KEY_STORAGE_KEY = 'openai_api_key';
+
+// Concurrency configuration for parallel chunk processing
+// Adjust based on your OpenAI API tier:
+// - Free tier: 3 (rate limit: 3 RPM)
+// - Tier 1: 5-10 (rate limit: ~10-20 RPM)
+// - Tier 2+: 10-20 (rate limit: 50+ RPM)
+const MAX_CONCURRENT_REQUESTS = 5;
+
+// Retry configuration for failed chunks
+const MAX_RETRIES = 3;
+const INITIAL_RETRY_DELAY_MS = 1000; // 1 second base delay
 
 /**
  * Get stored OpenAI API key from secure storage
@@ -94,6 +106,19 @@ interface GenerateTTSResult {
   error?: string;
 }
 
+interface ChunkResult {
+  index: number;
+  audioBuffer: ArrayBuffer;
+  success: boolean;
+}
+
+/**
+ * Sleep for specified milliseconds
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 /**
  * Generate TTS audio client-side using OpenAI API
  *
@@ -168,36 +193,108 @@ export async function generateTTS({
       console.log(`[TTS Client] Split into ${chunks.length} chunks`);
     }
 
-    // Generate audio for each chunk
-    const audioBuffers: ArrayBuffer[] = [];
+    // Generate audio for each chunk in parallel with controlled concurrency
     const totalChunks = chunks.length;
+    const limit = pLimit(MAX_CONCURRENT_REQUESTS);
+    let completedChunks = 0;
 
-    for (let i = 0; i < chunks.length; i++) {
-      const progressPercent = 10 + ((i / totalChunks) * 70); // 10% - 80%
-      if (onProgress) {
-        onProgress(
-          progressPercent,
-          `Generating audio chunk ${i + 1}/${totalChunks}...`
-        );
-      }
+    console.log(`[TTS Client] Starting parallel generation of ${totalChunks} chunks with ${MAX_CONCURRENT_REQUESTS} concurrent requests`);
 
-      console.log(
-        `[TTS Client] Generating chunk ${i + 1}/${totalChunks} (${chunks[i].length} chars)`
-      );
+    // Create parallel chunk generation tasks with retry logic
+    const chunkPromises = chunks.map((chunk, index) =>
+      limit(async (): Promise<ChunkResult> => {
+        let lastError: any;
 
-      const response = await openai.audio.speech.create({
-        model: 'tts-1',
-        voice: voice,
-        input: chunks[i],
-        response_format: 'mp3',
-        speed: validSpeed,
-      });
+        // Retry loop with exponential backoff
+        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+          try {
+            const attemptLabel = attempt > 0 ? ` (retry ${attempt}/${MAX_RETRIES})` : '';
+            console.log(`[TTS Client] Generating chunk ${index + 1}/${totalChunks}${attemptLabel} (${chunk.length} chars)`);
 
-      const arrayBuffer = await response.arrayBuffer();
-      audioBuffers.push(arrayBuffer);
+            const response = await openai.audio.speech.create({
+              model: 'tts-1',
+              voice: voice,
+              input: chunk,
+              response_format: 'mp3',
+              speed: validSpeed,
+            });
 
-      console.log(`[TTS Client] Chunk ${i + 1}/${totalChunks} complete`);
+            const chunkAudioBuffer = await response.arrayBuffer();
+            completedChunks++;
+
+            // Update progress
+            const progressPercent = 10 + ((completedChunks / totalChunks) * 70);
+            if (onProgress) {
+              onProgress(
+                progressPercent,
+                `Generated ${completedChunks}/${totalChunks} chunks`
+              );
+            }
+
+            console.log(`[TTS Client] Chunk ${index + 1}/${totalChunks} complete`);
+
+            return {
+              index,
+              audioBuffer: chunkAudioBuffer,
+              success: true,
+            };
+          } catch (error: any) {
+            lastError = error;
+
+            // Don't retry auth errors
+            if (error?.status === 401) {
+              console.error(`[TTS Client] Chunk ${index + 1} auth error - not retrying`);
+              throw error;
+            }
+
+            // Retry rate limits and server errors
+            if (attempt < MAX_RETRIES && (error?.status === 429 || error?.status >= 500)) {
+              // Calculate delay: exponential backoff or use retry-after header
+              const retryAfterMs = error?.headers?.['retry-after']
+                ? parseInt(error.headers['retry-after']) * 1000
+                : INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt);
+
+              console.warn(`[TTS Client] Chunk ${index + 1} failed (${error?.status}), retrying in ${retryAfterMs}ms...`);
+              await sleep(retryAfterMs);
+              continue;
+            }
+
+            // Out of retries or non-retryable error
+            console.error(`[TTS Client] Chunk ${index + 1} failed after ${attempt + 1} attempts:`, error);
+            throw error;
+          }
+        }
+
+        // Should never reach here, but TypeScript requires it
+        throw lastError;
+      })
+    );
+
+    // Wait for all chunks to complete
+    const results = await Promise.allSettled(chunkPromises);
+
+    // Separate successful and failed chunks
+    const successfulChunks = results
+      .filter((r): r is PromiseFulfilledResult<ChunkResult> => r.status === 'fulfilled')
+      .map(r => r.value)
+      .sort((a, b) => a.index - b.index);
+
+    const failedChunks = results
+      .map((r, index) => ({ result: r, index }))
+      .filter(({ result }) => result.status === 'rejected');
+
+    // Handle failures
+    if (failedChunks.length > 0) {
+      const failedIndices = failedChunks.map(({ index }) => index + 1).join(', ');
+      console.error(`[TTS Client] Failed chunks: ${failedIndices}`);
+
+      // If any chunk failed, return error
+      const firstError = failedChunks[0].result as PromiseRejectedResult;
+      throw firstError.reason;
     }
+
+    // Extract audio buffers in order
+    const audioBuffers = successfulChunks.map(chunk => chunk.audioBuffer);
 
     // Concatenate audio buffers
     if (onProgress) onProgress(85, 'Combining audio chunks...');
