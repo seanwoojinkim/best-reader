@@ -102,7 +102,7 @@ export default function UploadButton({ onUploadComplete }: UploadButtonProps) {
       <button
         onClick={handleClick}
         disabled={isUploading}
-        className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-gray-900 hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
+        className="inline-flex items-center px-3 py-2 sm:px-6 sm:py-3 border border-transparent text-sm sm:text-base font-medium rounded-md shadow-sm text-white bg-gray-900 hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 whitespace-nowrap"
       >
         {isUploading ? (
           <>
@@ -131,7 +131,7 @@ export default function UploadButton({ onUploadComplete }: UploadButtonProps) {
         ) : (
           <>
             <svg
-              className="-ml-1 mr-3 h-5 w-5"
+              className="-ml-1 mr-2 sm:mr-3 h-5 w-5"
               xmlns="http://www.w3.org/2000/svg"
               fill="none"
               viewBox="0 0 24 24"
@@ -144,7 +144,8 @@ export default function UploadButton({ onUploadComplete }: UploadButtonProps) {
                 d="M12 4v16m8-8H4"
               />
             </svg>
-            Upload EPUB
+            <span className="hidden xs:inline">Upload EPUB</span>
+            <span className="xs:hidden">Upload</span>
           </>
         )}
       </button>

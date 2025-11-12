@@ -10,7 +10,7 @@ export default function SearchButton({ onClick }: SearchButtonProps) {
   return (
     <button
       onClick={onClick}
-      className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+      className="inline-flex items-center gap-2 px-3 py-2 sm:px-4 bg-blue-600 text-white text-sm sm:text-base rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap"
     >
       <svg
         className="w-5 h-5"
@@ -25,7 +25,8 @@ export default function SearchButton({ onClick }: SearchButtonProps) {
           d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
         />
       </svg>
-      Search Books
+      <span className="hidden xs:inline">Search Books</span>
+      <span className="xs:hidden">Search</span>
     </button>
   );
 }

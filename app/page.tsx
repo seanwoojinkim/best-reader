@@ -15,6 +15,7 @@ export default function LibraryPage() {
   const [books, setBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
   const [showSearchModal, setShowSearchModal] = useState(false);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   // Phase 3: Onboarding flow
   const { showOnboarding, isChecking, completeOnboarding, skipOnboarding } = useOnboarding();
@@ -48,10 +49,26 @@ export default function LibraryPage() {
       <div className="min-h-screen">
         {/* Header */}
         <header className="border-b border-gray-200 dark:border-gray-700 safe-area-top">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
             <div className="flex items-center justify-between">
-              <h1 className="text-3xl font-serif font-bold text-gray-900 dark:text-gray-100">Library</h1>
-              <div className="flex gap-3">
+              <h1 className="text-2xl sm:text-3xl font-serif font-bold text-gray-900 dark:text-gray-100">Library</h1>
+              <div className="flex gap-2 sm:gap-3">
+                {/* View Toggle */}
+                <button
+                  onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
+                  className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                  aria-label={`Switch to ${viewMode === 'grid' ? 'list' : 'grid'} view`}
+                >
+                  {viewMode === 'grid' ? (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                    </svg>
+                  )}
+                </button>
                 <SearchButton onClick={() => setShowSearchModal(true)} />
                 <UploadButton onUploadComplete={handleUploadComplete} />
               </div>
@@ -90,7 +107,7 @@ export default function LibraryPage() {
           ) : books.length === 0 ? (
             <EmptyState />
           ) : (
-            <BookGrid books={books} onBookDeleted={loadBooks} />
+            <BookGrid books={books} onBookDeleted={loadBooks} viewMode={viewMode} />
           )}
         </main>
 
