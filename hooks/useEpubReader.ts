@@ -67,6 +67,43 @@ export function useEpubReader({
       allowScriptedContent: true, // Allow scripts in iframe to enable click forwarding
     });
 
+    // Register swipe handlers via epub.js hooks API (runs before render)
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchStartTime = 0;
+
+    newRendition.hooks.content.register((contents: any) => {
+      const doc = contents.document;
+
+      const handleTouchStart = (e: TouchEvent) => {
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+        touchStartTime = Date.now();
+      };
+
+      const handleTouchEnd = (e: TouchEvent) => {
+        const deltaX = e.changedTouches[0].clientX - touchStartX;
+        const deltaY = e.changedTouches[0].clientY - touchStartY;
+        const duration = Date.now() - touchStartTime;
+
+        // Only process as swipe if significant horizontal movement
+        if (Math.abs(deltaX) > 50 && duration < 500 && Math.abs(deltaX) > Math.abs(deltaY) * 2) {
+          // Valid swipe - prevent click and navigate
+          e.preventDefault();
+          e.stopPropagation();
+          if (deltaX > 0) {
+            newRendition.prev();
+          } else {
+            newRendition.next();
+          }
+        }
+        // Otherwise let the event propagate for tap zone handling
+      };
+
+      doc.addEventListener('touchstart', handleTouchStart, { passive: true });
+      doc.addEventListener('touchend', handleTouchEnd, { passive: false });
+    });
+
     setRendition(newRendition);
 
     return () => {
@@ -133,6 +170,7 @@ export function useEpubReader({
       rendition.off('click', handleIframeClick);
     };
   }, [rendition, containerRef]);
+
 
   // Generate locations for progress tracking (Phase 3)
   useEffect(() => {

@@ -1,7 +1,6 @@
 'use client';
 
 import React from 'react';
-import { useSwipeable } from 'react-swipeable';
 import { TAP_ZONES } from '@/lib/constants';
 
 interface TapZonesProps {
@@ -17,15 +16,6 @@ export default function TapZones({
   onToggleControls,
   children,
 }: TapZonesProps) {
-  // Swipe handlers
-  const swipeHandlers = useSwipeable({
-    onSwipedLeft: () => onNextPage(),
-    onSwipedRight: () => onPrevPage(),
-    trackMouse: false,
-    trackTouch: true,
-    preventScrollOnSwipe: true,
-  });
-
   const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
     const { clientX, currentTarget } = event;
     const { left, width } = currentTarget.getBoundingClientRect();
@@ -74,12 +64,11 @@ export default function TapZones({
 
   return (
     <div
-      {...swipeHandlers}
       onClick={handleClick}
       className="w-full h-full cursor-pointer select-none"
       role="button"
       tabIndex={0}
-      aria-label="Reading area - click left to go back, right to go forward, center to show menu"
+      aria-label="Reading area - swipe or click left to go back, right to go forward, center to show menu"
     >
       {children}
     </div>
