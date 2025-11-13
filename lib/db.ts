@@ -1,5 +1,5 @@
 import Dexie, { Table } from 'dexie';
-import type { Book, ReadingPosition, Session, Highlight, Analytics, Chapter, AudioFile, AudioSettings, AudioUsage, SentenceSyncData } from '@/types';
+import type { Book, ReadingPosition, Session, Highlight, Analytics, Chapter, AudioFile, AudioSettings, AudioUsage, SentenceSyncData, CustomFont } from '@/types';
 
 export class ReaderDatabase extends Dexie {
   books!: Table<Book, number>;
@@ -12,6 +12,7 @@ export class ReaderDatabase extends Dexie {
   audioSettings!: Table<AudioSettings, number>;
   audioUsage!: Table<AudioUsage, number>;
   sentenceSyncData!: Table<SentenceSyncData, number>;
+  customFonts!: Table<CustomFont, number>;
 
   constructor() {
     super('AdaptiveReaderDB');
@@ -57,6 +58,21 @@ export class ReaderDatabase extends Dexie {
       audioSettings: 'bookId, updatedAt',
       audioUsage: '++id, chapterId, bookId, timestamp',
       sentenceSyncData: '++id, audioFileId, chapterId, generatedAt',
+    });
+
+    // Version 5: Add custom fonts (Phase 1 & 2: Font Management)
+    this.version(5).stores({
+      books: '++id, title, author, addedAt, lastOpenedAt, *tags',
+      positions: 'bookId, updatedAt',
+      sessions: '++id, bookId, startTime, endTime',
+      highlights: '++id, bookId, cfiRange, color, createdAt',
+      analytics: '++id, sessionId, bookId, timestamp, event',
+      chapters: '++id, bookId, order, cfiStart',
+      audioFiles: '++id, chapterId, generatedAt',
+      audioSettings: 'bookId, updatedAt',
+      audioUsage: '++id, chapterId, bookId, timestamp',
+      sentenceSyncData: '++id, audioFileId, chapterId, generatedAt',
+      customFonts: '++id, name, family, uploadDate',
     });
   }
 }
@@ -528,3 +544,40 @@ export async function deleteSentenceSyncData(
     .equals(audioFileId)
     .delete();
 }
+
+// ============================================================
+// Custom Font Management Functions (Phase 1 & 2: Font Management)
+// ============================================================
+
+/**
+ * Upload a custom font
+ */
+export async function uploadFont(font: Omit<CustomFont, 'id'>): Promise<number> {
+  return await db.customFonts.add(font);
+}
+
+/**
+ * Get a custom font by ID
+ */
+export async function getFont(id: number): Promise<CustomFont | undefined> {
+  return await db.customFonts.get(id);
+}
+
+/**
+ * List all custom fonts
+ */
+export async function listFonts(): Promise<CustomFont[]> {
+  return await db.customFonts.orderBy('uploadDate').reverse().toArray();
+}
+
+/**
+ * Delete a custom font
+ */
+export async function deleteFont(id: number): Promise<void> {
+  await db.customFonts.delete(id);
+}
+
+/**
+ * Note: Font functions are exported as standalone functions above (uploadFont, getFont, listFonts, deleteFont)
+ * Import them directly instead of using db.* methods
+ */

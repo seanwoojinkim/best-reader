@@ -52,6 +52,97 @@ export const HIGHLIGHT_COLORS = {
   pink: '#FCE7F3',
 } as const;
 
+// Curated system fonts for Phase 1
+export const SYSTEM_FONTS = [
+  {
+    id: 'serif',
+    name: 'Serif',
+    family: 'Georgia, "Times New Roman", serif',
+    category: 'serif',
+  },
+  {
+    id: 'sans-serif',
+    name: 'Sans-serif',
+    family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    category: 'sans-serif',
+  },
+  {
+    id: 'charter',
+    name: 'Charter',
+    family: 'Charter, Georgia, serif',
+    category: 'serif',
+  },
+  {
+    id: 'iowan',
+    name: 'Iowan Old Style',
+    family: '"Iowan Old Style", "Palatino Linotype", Palatino, serif',
+    category: 'serif',
+  },
+  {
+    id: 'palatino',
+    name: 'Palatino',
+    family: 'Palatino, "Palatino Linotype", "Book Antiqua", serif',
+    category: 'serif',
+  },
+  {
+    id: 'baskerville',
+    name: 'Baskerville',
+    family: 'Baskerville, "Baskerville Old Face", "Garamond", serif',
+    category: 'serif',
+  },
+  {
+    id: 'garamond',
+    name: 'Garamond',
+    family: 'Garamond, "Apple Garamond", "Adobe Garamond Pro", serif',
+    category: 'serif',
+  },
+  {
+    id: 'sf-pro',
+    name: 'SF Pro',
+    family: '"SF Pro Text", -apple-system, sans-serif',
+    category: 'sans-serif',
+  },
+  {
+    id: 'helvetica',
+    name: 'Helvetica',
+    family: '"Helvetica Neue", Helvetica, Arial, sans-serif',
+    category: 'sans-serif',
+  },
+  {
+    id: 'arial',
+    name: 'Arial',
+    family: 'Arial, "Helvetica Neue", Helvetica, sans-serif',
+    category: 'sans-serif',
+  },
+  {
+    id: 'open-dyslexic',
+    name: 'OpenDyslexic',
+    family: 'OpenDyslexic, sans-serif',
+    category: 'accessibility',
+  },
+] as const;
+
+// Font-related constants (Phase 2: Custom Fonts)
+export const FONT_CONSTANTS = {
+  /** Maximum font file size in megabytes */
+  MAX_FILE_SIZE_MB: 5,
+  /** Maximum font file size in bytes (5MB) */
+  MAX_FILE_SIZE_BYTES: 5 * 1024 * 1024,
+  /** Maximum number of fonts to cache in memory (LRU eviction) */
+  CACHE_SIZE_LIMIT: 10,
+  /**
+   * Delay in milliseconds to wait after @font-face injection before re-displaying
+   * Ensures browser has time to parse and load the font face
+   */
+  FONT_LOAD_TIMEOUT_MS: 200,
+  /**
+   * Base64 encoding overhead factor (33% size increase)
+   * Base64 represents 3 bytes with 4 characters, adding ~33% overhead
+   */
+  BASE64_OVERHEAD_FACTOR: 1.33,
+} as const;
+
 export type Theme = keyof typeof THEME_COLORS;
 export type FontFamily = 'serif' | 'sans-serif';
+export type SystemFontId = typeof SYSTEM_FONTS[number]['id'];
 export type HighlightColor = keyof typeof HIGHLIGHT_COLORS;

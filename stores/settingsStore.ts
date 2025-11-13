@@ -11,7 +11,9 @@ interface SettingsStore extends ReaderSettings {
   // Actions
   setTheme: (theme: ReaderSettings['theme']) => void;
   setFontSize: (size: number) => void;
-  setFontFamily: (family: ReaderSettings['fontFamily']) => void;
+  setFontFamily: (family: ReaderSettings['fontFamily']) => void; // Deprecated
+  setSystemFont: (fontId: string) => void; // Phase 1: System fonts
+  setCustomFont: (fontId: number) => void; // Phase 2: Custom fonts
   setLineHeight: (height: number) => void;
   setMargins: (margins: number) => void;
   setCurrentBook: (bookId: number | null) => void;
@@ -28,6 +30,8 @@ export const useSettingsStore = create<SettingsStore>()(
       theme: 'light',
       fontSize: TYPOGRAPHY_DEFAULTS.fontSize,
       fontFamily: TYPOGRAPHY_DEFAULTS.fontFamily,
+      systemFontId: 'serif', // Default to serif system font
+      customFontId: undefined,
       lineHeight: TYPOGRAPHY_DEFAULTS.lineHeight,
       margins: TYPOGRAPHY_DEFAULTS.marginDesktop,
       currentBookId: null,
@@ -37,7 +41,9 @@ export const useSettingsStore = create<SettingsStore>()(
       // Actions
       setTheme: (theme) => set({ theme }),
       setFontSize: (fontSize) => set({ fontSize }),
-      setFontFamily: (fontFamily) => set({ fontFamily }),
+      setFontFamily: (fontFamily) => set({ fontFamily }), // Deprecated: kept for backwards compatibility
+      setSystemFont: (systemFontId) => set({ systemFontId, customFontId: undefined }),
+      setCustomFont: (customFontId) => set({ customFontId, systemFontId: undefined }),
       setLineHeight: (lineHeight) => set({ lineHeight }),
       setMargins: (margins) => set({ margins }),
       setCurrentBook: (currentBookId) => set({ currentBookId }),
@@ -49,6 +55,8 @@ export const useSettingsStore = create<SettingsStore>()(
           theme: 'light',
           fontSize: TYPOGRAPHY_DEFAULTS.fontSize,
           fontFamily: TYPOGRAPHY_DEFAULTS.fontFamily,
+          systemFontId: 'serif',
+          customFontId: undefined,
           lineHeight: TYPOGRAPHY_DEFAULTS.lineHeight,
           margins: TYPOGRAPHY_DEFAULTS.marginDesktop,
         }),
@@ -60,6 +68,8 @@ export const useSettingsStore = create<SettingsStore>()(
         theme: state.theme,
         fontSize: state.fontSize,
         fontFamily: state.fontFamily,
+        systemFontId: state.systemFontId,
+        customFontId: state.customFontId,
         lineHeight: state.lineHeight,
         margins: state.margins,
       }),

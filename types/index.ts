@@ -54,9 +54,22 @@ export interface Highlight {
 export interface ReaderSettings {
   theme: 'light' | 'dark' | 'sepia';
   fontSize: number; // 14-24px
-  fontFamily: 'serif' | 'sans-serif';
+  fontFamily: 'serif' | 'sans-serif'; // Deprecated: kept for backwards compatibility
+  systemFontId?: string; // System font selection (Phase 1)
+  customFontId?: number; // Custom font ID from IndexedDB (Phase 2)
   lineHeight: number; // 1.2-1.8
   margins: number; // 1-4rem
+}
+
+// Custom font interface (Phase 2)
+export interface CustomFont {
+  id?: number;
+  name: string;           // Display name (e.g., "My Beautiful Font")
+  family: string;         // CSS font-family name extracted from font file
+  buffer: ArrayBuffer;    // Font file data (WOFF2, WOFF, TTF, OTF)
+  format: 'woff2' | 'woff' | 'truetype' | 'opentype';
+  uploadDate: Date;
+  size: number;           // Bytes
 }
 
 // Analytics interface (Phase 3) - Privacy-first, stored locally only
@@ -123,6 +136,50 @@ export interface AudioUsage {
 
 // OpenAI voice types
 export type OpenAIVoice = 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer';
+
+// ============================================================
+// Epub.js Type Definitions
+// ============================================================
+
+/**
+ * Epub.js Contents object representing iframe content
+ */
+export interface EpubContents {
+  document: Document;
+  window: Window;
+  content: HTMLElement;
+  [key: string]: any; // Other epub.js properties
+}
+
+/**
+ * Epub.js Location object representing position in book
+ */
+export interface EpubLocation {
+  start: {
+    cfi: string;
+    displayed: {
+      page: number;
+      total: number;
+    };
+    href: string;
+    index: number;
+    location: number;
+    percentage: number;
+  };
+  end: {
+    cfi: string;
+    displayed: {
+      page: number;
+      total: number;
+    };
+    href: string;
+    index: number;
+    location: number;
+    percentage: number;
+  };
+  atStart: boolean;
+  atEnd: boolean;
+}
 
 // ============================================================
 // Sentence Synchronization Interfaces (TTS Phase: Sentence Sync)
