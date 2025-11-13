@@ -430,6 +430,8 @@ export function useEpubReader({
       },
       p: {
         'margin-bottom': '1em !important',
+        'text-align': 'justify !important',
+        'text-justify': 'inter-word !important', // Better justification on Android
       },
       a: {
         color: `${colors.text} !important`,
