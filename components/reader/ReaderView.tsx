@@ -129,13 +129,14 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
   }, [chapters]);
 
   // Load audio settings (TTS Phase 3)
-  useEffect(() => {
-    const loadAudioSettings = async () => {
-      const settings = await getAudioSettings(bookId) || getDefaultAudioSettings(bookId);
-      setAudioSettings(settings);
-    };
-    loadAudioSettings();
+  const loadAudioSettings = useCallback(async () => {
+    const settings = await getAudioSettings(bookId) || getDefaultAudioSettings(bookId);
+    setAudioSettings(settings);
   }, [bookId]);
+
+  useEffect(() => {
+    loadAudioSettings();
+  }, [loadAudioSettings]);
 
   // Load sentence sync data when audio chapter changes (TTS Phase: Sentence Sync)
   useEffect(() => {
@@ -444,7 +445,14 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
       </div>
 
       {/* Settings Drawer */}
-      <SettingsDrawer isOpen={showSettings} onClose={() => setShowSettings(false)} bookId={bookId} />
+      <SettingsDrawer
+        isOpen={showSettings}
+        onClose={() => {
+          setShowSettings(false);
+          loadAudioSettings(); // Reload settings after drawer closes
+        }}
+        bookId={bookId}
+      />
 
       {/* Chapter List Modal (TTS Phase 3) */}
       {showChapterList && (
