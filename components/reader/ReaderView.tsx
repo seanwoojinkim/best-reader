@@ -408,10 +408,23 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
               {/* Chapters Button (TTS Phase 3) */}
               <button
                 onClick={() => setShowChapterList(!showChapterList)}
-                className="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
+                className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                aria-label="Chapters"
               >
-                <span className="hidden md:inline">Chapters</span>
-                <span className="md:hidden">📑</span>
+                <svg
+                  className="w-6 h-6 md:hidden"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 6h16M4 10h16M4 14h16M4 18h16"
+                  />
+                </svg>
+                <span className="hidden md:inline text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100">Chapters</span>
               </button>
 
               <button
