@@ -428,6 +428,10 @@ export function useEpubReader({
         'line-height': `${lineHeight} !important`,
         padding: '2rem !important',
       },
+      // Force all elements to inherit font-size to override epub's class-based sizes
+      'body *': {
+        'font-size': 'inherit !important',
+      },
       p: {
         'margin-bottom': '1em !important',
         'text-align': 'justify !important',
