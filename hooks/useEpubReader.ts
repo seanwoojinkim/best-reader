@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import ePub, { Book, Rendition } from 'epubjs';
+import FontFaceObserver from 'fontfaceobserver';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { THEME_COLORS, SYSTEM_FONTS, FONT_CONSTANTS } from '@/lib/constants';
 import type { ReaderSettings, EpubContents, EpubLocation } from '@/types';
@@ -316,10 +317,12 @@ export function useEpubReader({
       height: '100%',
       flow: 'paginated',
       snap: true,
+      contained: true,  // FIX: Forces explicit container dimensions (epub.js #862)
+      spread: 'none',   // FIX: Disables 2-page spread to prevent pagination bugs
       allowScriptedContent: true, // Allow scripts in iframe to enable click forwarding
-    });
+    } as any);
 
-    // Register content hooks for swipe handlers and font injection
+    // Register content hooks for swipe handlers
     let touchStartX = 0;
     let touchStartY = 0;
     let touchStartTime = 0;
@@ -355,8 +358,15 @@ export function useEpubReader({
 
       doc.addEventListener('touchstart', handleTouchStart, { passive: true });
       doc.addEventListener('touchend', handleTouchEnd, { passive: false });
+    });
 
-      // Font injection hook - apply fonts to new pages
+    // Register render hook for font injection with blocking wait
+    // This hook blocks pagination calculation until fonts are loaded,
+    // preventing the "last page skip" bug on Boox Palma 2
+    newRendition.hooks.render.register(async (view: any) => {
+      const doc = view.document;
+
+      // Font injection - apply fonts to new pages
       const fontStyleTag = doc.createElement('style');
       fontStyleTag.id = 'user-font-style';
 
@@ -370,6 +380,26 @@ export function useEpubReader({
 
       fontStyleTag.textContent = css;
       doc.head.appendChild(fontStyleTag);
+
+      // Wait for custom font to load before allowing pagination calculation
+      // This prevents FOUC and pagination miscalculation on E-ink devices
+      if (settings.customFontFamily && settings.customFontDataURL) {
+        try {
+          const fontObserver = new FontFaceObserver(settings.customFontFamily);
+          await fontObserver.load(null, 5000); // 5 second timeout
+          console.log('[useEpubReader] Custom font loaded, pagination will use correct metrics');
+
+          // Force layout recalculation after font loads
+          // This ensures pagination uses actual rendered font metrics
+          if (doc.body) {
+            const height = doc.body.offsetHeight; // Force reflow
+            console.log('[useEpubReader] Forced layout recalculation, body height:', height);
+          }
+        } catch (error) {
+          console.warn('[useEpubReader] Font load timeout or error, proceeding with fallback:', error);
+          // Continue anyway - better to render with fallback font than hang
+        }
+      }
     });
 
     setRendition(newRendition);
