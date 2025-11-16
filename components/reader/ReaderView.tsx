@@ -215,7 +215,14 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
       if (hasNextChapter) {
         const nextChapter = chapters[currentIndex + 1];
 
-        // Check if next chapter has audio generated
+        // Check if next chapter has audio generated (skip if no id)
+        if (!nextChapter.id) {
+          console.log(`[TTS Auto-Advance] Next chapter has no id, stopping playback`);
+          setCurrentAudioChapter(null);
+          trackListeningTime(false);
+          return;
+        }
+
         const audioFile = await getAudioFile(nextChapter.id);
 
         if (audioFile) {
