@@ -207,9 +207,39 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
         }
       }
     },
-    onEnded: () => {
-      setCurrentAudioChapter(null);
-      trackListeningTime(false); // Stop tracking listening time
+    onEnded: async () => {
+      // Auto-advance to next chapter if available
+      const currentIndex = chapters.findIndex(ch => ch.id === currentAudioChapter?.id);
+      const hasNextChapter = currentIndex >= 0 && currentIndex < chapters.length - 1;
+
+      if (hasNextChapter) {
+        const nextChapter = chapters[currentIndex + 1];
+
+        // Check if next chapter has audio generated
+        const audioFile = await getAudioFile(nextChapter.id);
+
+        if (audioFile) {
+          console.log(`[TTS Auto-Advance] Moving to next chapter: ${nextChapter.title}`);
+
+          // Auto-advance to next chapter
+          setCurrentAudioChapter(nextChapter);
+
+          // Navigate reader to next chapter start
+          if (goToLocation && nextChapter.cfiStart) {
+            goToLocation(nextChapter.cfiStart);
+          }
+        } else {
+          // Next chapter has no audio - stop playback
+          console.log(`[TTS Auto-Advance] Next chapter has no audio, stopping playback`);
+          setCurrentAudioChapter(null);
+          trackListeningTime(false);
+        }
+      } else {
+        // Last chapter or chapter not found - stop playback
+        console.log(`[TTS Auto-Advance] Reached last chapter, stopping playback`);
+        setCurrentAudioChapter(null);
+        trackListeningTime(false);
+      }
     },
   });
 
