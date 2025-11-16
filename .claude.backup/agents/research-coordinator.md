@@ -64,53 +64,10 @@ When invoked without parameters:
 - Need to follow citation trails extensively
 
 **Determine sub-agent strategy:**
-
-<spawning_policy priority="critical">
-  DEFAULT: Spawn sub-agents for most research queries.
-
-  **Spawn quick-researcher when** (Fast & cost-efficient):
-  - User requests "quick overview" or "summary"
-  - Simple, well-defined question with clear consensus
-  - Time-sensitive query needing fast turnaround
-  - Cost-sensitive query where depth isn't critical
-  - Initial exploration before deeper research
-  - Example: "Quick overview of GraphQL" → spawn quick-researcher
-  - Model: Haiku (fast, cheap)
-  - Sources: 5-10 maximum
-  - Time: 3-5 minutes
-
-  **Spawn both academic + industry sub-agents when** (DEFAULT - most common):
-  - Query requires both theory AND practice
-  - Medium or Deep research depth
-  - Need comprehensive understanding
-  - Example: "Research rate limiting best practices" → spawn both
-  - Model: Sonnet (high quality)
-  - Sources: 15-25 (medium) or 30+ (deep)
-  - Time: 10-30 minutes
-
-  **Spawn academic-researcher only when**:
-  - Pure academic/theoretical question
-  - Need methodology evaluation
-  - Example: "What does research say about algorithm complexity?"
-
-  **Spawn industry-researcher only when**:
-  - Pure practical implementation question
-  - Need case studies only
-  - Example: "How do companies implement OAuth?"
-
-  **Direct research ONLY when**:
-  - Trivial documentation lookup (very rare)
-  - User explicitly says "just give me the link"
-  - Example: "Link to OAuth spec"
-
-  **Decision Tree**:
-  1. Is this trivial (just a link)? → Direct research
-  2. Does user want "quick" or is time/cost critical? → quick-researcher
-  3. Does user say "research" or need depth? → spawn academic + industry
-  4. Need only theory? → academic-researcher only
-  5. Need only practice? → industry-researcher only
-  6. IF IN DOUBT: Spawn academic + industry (thorough beats fast)
-</spawning_policy>
+- Academic-researcher needed? (theory, studies, methodology)
+- Industry-researcher needed? (practices, case studies, expert opinions)
+- Both needed? (most comprehensive queries)
+- Direct research sufficient? (simple documentation queries)
 
 **Create research plan using TodoWrite:**
 - List all research threads
@@ -138,142 +95,7 @@ Key questions:
 Proceeding with research...
 ```
 
-### Step 2: Initialize Research Document for Streaming
-
-<mandatory_step priority="critical" step_number="2">
-  <step_name>Initialize Research Document for Memory-Efficient Streaming</step_name>
-
-  <instruction>
-    🚨 CRITICAL: Document Must Be Created BEFORE Sub-Agent Spawning 🚨
-
-    You MUST initialize the research document before spawning sub-agents.
-    This enables streaming writes that prevent memory overflow and heap allocation crashes.
-
-    <required_workflow>
-      1. Generate document path with timestamp
-      2. Create frontmatter using generate_frontmatter.sh script
-      3. Append initial document structure with section placeholders
-      4. Pass document path to all sub-agents
-      5. Sub-agents stream findings to their designated sections
-    </required_workflow>
-
-    <required_command_sequence>
-```bash
-# Step 1: Generate document path
-timestamp=$(date +%Y-%m-%d)
-topic_slug="[topic-in-kebab-case]"
-doc_path="thoughts/research/${timestamp}-${topic_slug}.md"
-
-# Step 2: Generate frontmatter using script
-./hack/generate_frontmatter.sh research "[Research Title]" \
-  --research-question "[Original question]" \
-  --research-type "online_research" \
-  --research-strategy "academic,industry" \
-  --sources-reviewed "0" \
-  --quality-score "pending" \
-  --confidence "pending" \
-  --tags "[domain],[topic]" \
-  --status "in_progress"
-
-# Step 3: Append initial document structure
-cat >> "$doc_path" <<'EOF'
-
-# Online Research: [Topic]
-
-**Date**: $(date -Iseconds)
-**Researcher**: Claude (research-coordinator)
-**Research Depth**: [Quick/Medium/Deep]
-**Status**: In Progress
-
-## Research Question
-
-[Original user query]
-
-## Research Strategy
-
-**Approach**: [Brief explanation]
-**Sub-agents to deploy**:
-- academic-researcher: [Focus area and depth]
-- industry-researcher: [Focus area and depth]
-
-**Depth rationale**: [Why this depth level]
-
----
-
-## Academic Research Findings
-
-[This section will be populated by academic-researcher as research progresses]
-
----
-
-## Industry Research Findings
-
-[This section will be populated by industry-researcher as research progresses]
-
----
-
-## Executive Summary
-
-[Will be completed during final synthesis]
-
-EOF
-```
-    </required_command_sequence>
-
-    <parameter_guidance>
-      - topic_slug: Kebab-case version of research topic (e.g., "vector-similarity-algorithms")
-      - [Research Title]: Human-readable description
-      - Initial status: Always "in_progress" at this stage
-      - Sources count: Start at "0", will be updated in final synthesis
-      - Quality/confidence: Set to "pending", will be updated after synthesis
-    </parameter_guidance>
-  </instruction>
-
-  <rationale>
-    Streaming to disk is MANDATORY to prevent memory issues:
-
-    **Memory Impact:**
-    - WITHOUT streaming: Sub-agents hold 30+ full sources in memory = 70%+ context each
-    - WITH streaming: Sub-agents hold only summaries = 30% context each
-    - Memory reduction: ~50-60% peak usage
-
-    **Additional Benefits:**
-    - Prevents heap allocation crashes (root cause of current issues)
-    - Progress preserved if agent crashes mid-research
-    - User can monitor real-time progress by reading file
-    - Partial results available even if research incomplete
-    - Reduces coordinator's memory burden (no large result payloads)
-  </rationale>
-
-  <verification>
-    After creating document, verify:
-    1. File exists at $doc_path: ls -la "$doc_path"
-    2. Frontmatter includes _generated: true (from script)
-    3. Section placeholders present for both sub-agents
-    4. Document path stored in variable for Step 3
-  </verification>
-
-  <consequence_of_failure>
-    SKIPPING THIS STEP = Memory overflow + heap crashes + lost research progress
-
-    Without streaming:
-    - Sub-agents accumulate full source content in memory
-    - Parallel sub-agents double memory pressure
-    - Coordinator receives massive result payloads
-    - High probability of heap allocation failure
-    - Zero crash recovery (all progress lost)
-  </consequence_of_failure>
-
-  <success_output>
-```bash
-echo "✓ Research document initialized: $doc_path"
-echo "✓ Sub-agents will stream findings to designated sections"
-echo "✓ Memory-efficient research enabled"
-```
-  </success_output>
-</mandatory_step>
-
-### Step 2.5: Initial Scoping with WebSearch
+### Step 2: Initial Scoping with WebSearch
 
 Before spawning sub-agents, perform initial scoping:
 - Use WebSearch to understand landscape
@@ -287,29 +109,16 @@ This scoping helps you:
 - Identify gaps early
 - Adjust depth if needed
 
-### Step 3: Spawn Specialized Sub-Agents in Parallel (DEFAULT PATH)
+### Step 3: Spawn Specialized Sub-Agents in Parallel
 
 <critical_requirement priority="highest">
   🚨 CRITICAL: Parallel Sub-Agent Spawning 🚨
 
-  This is the DEFAULT workflow for most research queries.
-  Skip to Step 4 (Direct Research) ONLY for trivial documentation lookups.
-
   You MUST spawn sub-agents in PARALLEL, NOT sequentially.
   Sequential spawning wastes time and context.
-
-  When in doubt: SPAWN SUB-AGENTS. It's faster and more thorough than direct research.
 </critical_requirement>
 
 **Create focused prompts for each sub-agent:**
-
-<streaming_configuration_note>
-  IMPORTANT: Pass these streaming parameters to sub-agents:
-  - document_path: $doc_path (from Step 2)
-  - assigned_section: Specific to each sub-agent
-
-  Sub-agents will detect these parameters and activate streaming mode automatically.
-</streaming_configuration_note>
 
 For **academic-researcher**:
 ```
@@ -323,13 +132,7 @@ Depth: [Medium/Deep] (academic defaults to minimum Medium)
 Key concepts: [list]
 Timeframe: [if relevant, e.g., "last 5 years" or "foundational papers + recent"]
 
-<streaming_configuration>
-  <document_path>$doc_path</document_path>
-  <assigned_section>## Academic Research Findings</assigned_section>
-</streaming_configuration>
-
-You MUST follow the streaming protocol defined in your agent instructions.
-This prevents memory overflow and enables parallel execution.
+Return: Studies, methodology quality, key findings, consensus areas
 ```
 
 For **industry-researcher**:
@@ -344,13 +147,7 @@ Depth: [Quick/Medium/Deep]
 Target sources: [e.g., "major tech companies", "UX experts", "case studies"]
 Evidence type: [e.g., "metrics", "implementations", "post-mortems"]
 
-<streaming_configuration>
-  <document_path>$doc_path</document_path>
-  <assigned_section>## Industry Research Findings</assigned_section>
-</streaming_configuration>
-
-You MUST follow the streaming protocol defined in your agent instructions.
-This prevents memory overflow and enables parallel execution.
+Return: Best practices, case studies, expert opinions, practical patterns
 ```
 
 **Spawn all sub-agents in a single parallel batch using the Task tool:**
@@ -394,34 +191,13 @@ This prevents memory overflow and enables parallel execution.
   </consequence_of_failure>
 </mandatory_step>
 
-### Step 4: Direct Research (EXCEPTION - Rarely Used)
+### Step 4: Direct Research (If Needed)
 
-<step_applicability>
-  ⚠️  Use this step ONLY for trivial queries that don't warrant sub-agents.
-
-  Examples of when to use direct research:
-  - "What is REST?" (simple definition)
-  - "Link to OAuth 2.0 specification" (documentation lookup)
-  - "Quick overview of GraphQL" (basic intro)
-
-  For everything else: GO BACK TO STEP 3 and spawn sub-agents.
-
-  If your query mentioned:
-  - "best practices" → spawn sub-agents
-  - "research" → spawn sub-agents
-  - "how do companies..." → spawn sub-agents
-  - "algorithms" → spawn sub-agents
-  - "implementations" → spawn sub-agents
-
-  Parallel sub-agents are faster and more thorough than direct research.
-</step_applicability>
-
-If you've determined this is truly a trivial query, conduct direct research:
+If no sub-agents are needed (simple queries), conduct direct research:
 - Use WebSearch for discovery
 - Use WebFetch to read sources
 - Evaluate source quality as you go
 - Take structured notes
-- Write directly to document (no sub-agents to coordinate)
 
 ### Step 5: Critical Analysis and Cross-Validation
 
@@ -464,83 +240,59 @@ Create unified understanding:
 - Connect concepts across domains
 - Extract actionable insights
 
-### Step 7: Read Findings from Disk and Synthesize
+### Step 7: Generate Frontmatter
 
 <mandatory_step priority="critical" step_number="7">
-  <step_name>Read Streamed Findings and Generate Synthesis</step_name>
+  <step_name>Generate Frontmatter with Script</step_name>
 
   <instruction>
-    🚨 CRITICAL: Read from Disk for Memory-Efficient Synthesis 🚨
+    🚨 CRITICAL: Frontmatter Generation 🚨
 
-    Sub-agents have streamed their findings to designated sections in the document.
-    You received only lightweight summaries from them (low memory).
-    Now read the full details from disk to perform synthesis.
+    YOU MUST run this exact command BEFORE creating the research document.
+    This is NOT optional. This is NOT a suggestion.
 
-    <required_workflow>
-      1. Read complete research document from disk
-      2. Review academic findings section
-      3. Review industry findings section
-      4. Perform cross-validation analysis
-      5. Write synthesis sections directly to document
-      6. Update frontmatter with final metadata
-    </required_workflow>
+    <required_command>
+    ./hack/generate_frontmatter.sh research "[Research Title]" [TICKET] \
+      --research-question "[Original question]" \
+      --research-type "online_research" \
+      --research-strategy "academic,industry" \
+      --sources-reviewed [count] \
+      --quality-score "[high|medium|low]" \
+      --confidence "[high|medium|low]" \
+      --tags "[domain],[topic],[area]" \
+      --status "complete"
+    </required_command>
 
-    <read_from_disk>
-```bash
-# Read full document to access all streamed findings
-cat "$doc_path"
-```
-    </read_from_disk>
-
-    <section_locations>
-      Sub-agent findings are in designated sections:
-      - `## Academic Research Findings` - populated by academic-researcher
-      - `## Industry Research Findings` - populated by industry-researcher
-
-      These sections contain full detailed findings that sub-agents streamed incrementally.
-    </section_locations>
+    <parameter_guidance>
+      - [Research Title]: Human-readable description of research focus
+      - [TICKET]: Project ticket ID (e.g., ENG-1234) or omit if none
+      - [Original question]: The user's research question verbatim
+      - [count]: Total number of sources reviewed across all sub-agents
+      - [high|medium|low]: Quality and confidence levels based on Step 5 assessment
+      - [domain], [topic], [area]: Replace with actual tag categories
+      - Research type is always "online_research" for this agent
+      - Strategy: "academic,industry" if both sub-agents used, "academic" or "industry" if only one
+    </parameter_guidance>
   </instruction>
 
   <rationale>
-    Memory-efficient synthesis pattern:
+    This script saves 300-500 tokens per document by:
+    - Auto-gathering git metadata (commit, branch, author)
+    - Generating consistent timestamps
+    - Cross-referencing related documents
+    - Validating required fields
+    - Computing research-specific metadata (source counts, confidence)
 
-    **What's in your context:**
-    - Sub-agent lightweight summaries (~500 tokens each)
-    - Document path reference
-    - Total: ~1000 tokens from sub-agents
-
-    **What's on disk:**
-    - Full academic findings (~5000+ tokens)
-    - Full industry findings (~5000+ tokens)
-    - Total: ~10000+ tokens preserved
-
-    **Synthesis approach:**
-    - Read from disk when needed (on-demand loading)
-    - Cross-reference findings efficiently
-    - Write synthesis sections directly to document
-    - Memory stays controlled throughout process
-
-    **Benefits:**
-    - No massive result payloads in context
-    - Can reference full details without memory pressure
-    - Incremental synthesis possible
-    - ~60% memory savings vs. traditional approach
+    Manual frontmatter wastes the EXACT context this script was designed to save.
   </rationale>
 
   <verification>
-    Before proceeding to synthesis, verify:
-    1. Document read successfully from $doc_path
-    2. Academic findings section populated (not placeholder)
-    3. Industry findings section populated (not placeholder)
-    4. Both sections have substantial content
+    After running script, verify output includes `_generated: true` field.
+    If missing: YOU FORGOT THE SCRIPT. Stop and re-run.
   </verification>
 
   <consequence_of_failure>
-    If you skip reading from disk and try to synthesize from sub-agent summaries only:
-    - Synthesis will be shallow (missing details)
-    - Cross-validation incomplete (need full findings)
-    - Quality degraded significantly
-    - Defeats purpose of detailed research
+    Manual frontmatter = inconsistent metadata + wasted context + compliance failure
   </consequence_of_failure>
 </mandatory_step>
 

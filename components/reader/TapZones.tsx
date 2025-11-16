@@ -27,12 +27,15 @@ export default function TapZones({
 
     if (percentage < TAP_ZONES.left) {
       // Left zone - previous page
+      console.log('[PAGINATION] Tap zone: LEFT (previous page)', { percentage: percentage.toFixed(2) });
       onPrevPage();
     } else if (percentage > 1 - TAP_ZONES.right) {
       // Right zone - next page
+      console.log('[PAGINATION] Tap zone: RIGHT (next page)', { percentage: percentage.toFixed(2) });
       onNextPage();
     } else {
       // Center zone - toggle controls
+      console.log('[PAGINATION] Tap zone: CENTER (toggle controls)', { percentage: percentage.toFixed(2) });
       onToggleControls();
     }
   };
@@ -44,15 +47,18 @@ export default function TapZones({
         case 'ArrowLeft':
         case 'PageUp':
           event.preventDefault();
+          console.log('[PAGINATION] Keyboard: PREV', { key: event.key });
           onPrevPage();
           break;
         case 'ArrowRight':
         case 'PageDown':
         case ' ': // Spacebar
           event.preventDefault();
+          console.log('[PAGINATION] Keyboard: NEXT', { key: event.key });
           onNextPage();
           break;
         case 'Escape':
+          console.log('[PAGINATION] Keyboard: TOGGLE CONTROLS');
           onToggleControls();
           break;
       }

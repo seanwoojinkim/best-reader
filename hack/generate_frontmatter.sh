@@ -7,7 +7,7 @@
 #   ./hack/generate_frontmatter.sh <doc_type> <title> [ticket_id] [options]
 #
 # Doc Types:
-#   research, plan, implementation, review, learning
+#   research, plan, implementation, review, validation, learning
 #
 # Examples:
 #   ./hack/generate_frontmatter.sh research "Authentication Flow Investigation" ENG-1234
@@ -78,6 +78,16 @@ Options (type-specific):
     --issues N                - Number of issues found
     --blocking N              - Number of blocking issues
 
+  Validation:
+    --plan-ref PATH           - Reference to plan document
+    --impl-ref PATH           - Reference to implementation document
+    --phase N                 - Validated phase number
+    --phase-name "..."        - Phase name
+    --test-status STATUS      - Test status: passed, passed_with_warnings, failed
+    --tests-total N           - Total number of tests
+    --tests-passed N          - Number of passing tests
+    --tests-failed N          - Number of failing tests
+
   Learning:
     --feature-ref PATH        - Reference to feature plan
     --learning-type TYPE      - phase_summary or comprehensive_synthesis
@@ -140,12 +150,12 @@ EOF
 validate_doc_type() {
     local type=$1
     case $type in
-        research|plan|implementation|review|learning)
+        research|plan|implementation|review|validation|learning)
             return 0
             ;;
         *)
             print_error "Invalid doc_type: $type"
-            print_usage "Must be one of: research, plan, implementation, review, learning"
+            print_usage "Must be one of: research, plan, implementation, review, validation, learning"
             exit 1
             ;;
     esac
@@ -203,6 +213,10 @@ PHASE_NAME=""
 REVIEW_STATUS=""
 ISSUES_FOUND=""
 BLOCKING_ISSUES=""
+TEST_STATUS=""
+TESTS_TOTAL=""
+TESTS_PASSED=""
+TESTS_FAILED=""
 LEARNING_TYPE=""
 LEARNING_LEVEL=""
 CONCEPTS=""
@@ -273,6 +287,22 @@ while [ $# -gt 0 ]; do
             ;;
         --blocking)
             BLOCKING_ISSUES="$2"
+            shift 2
+            ;;
+        --test-status)
+            TEST_STATUS="$2"
+            shift 2
+            ;;
+        --tests-total)
+            TESTS_TOTAL="$2"
+            shift 2
+            ;;
+        --tests-passed)
+            TESTS_PASSED="$2"
+            shift 2
+            ;;
+        --tests-failed)
+            TESTS_FAILED="$2"
             shift 2
             ;;
         --learning-type)
@@ -415,6 +445,37 @@ case $DOC_TYPE in
         echo ""
         ;;
 
+    validation)
+        if [ -n "$PHASE" ]; then
+            echo "validated_phase: $PHASE"
+        fi
+        if [ -n "$PHASE_NAME" ]; then
+            echo "phase_name: \"$PHASE_NAME\""
+        fi
+        if [ -n "$PLAN_REF" ]; then
+            echo "plan_reference: $PLAN_REF"
+        fi
+        if [ -n "$IMPL_REF" ]; then
+            echo "implementation_reference: $IMPL_REF"
+        fi
+        if [ -n "$TEST_STATUS" ]; then
+            echo "test_status: $TEST_STATUS"
+        else
+            echo "test_status: passed  # passed | passed_with_warnings | failed"
+        fi
+        echo "validator: $AUTHOR_NAME"
+        if [ -n "$TESTS_TOTAL" ]; then
+            echo "tests_total: $TESTS_TOTAL"
+        fi
+        if [ -n "$TESTS_PASSED" ]; then
+            echo "tests_passed: $TESTS_PASSED"
+        fi
+        if [ -n "$TESTS_FAILED" ]; then
+            echo "tests_failed: $TESTS_FAILED"
+        fi
+        echo ""
+        ;;
+
     learning)
         if [ -n "$FEATURE_REF" ]; then
             echo "feature_reference: $FEATURE_REF"
@@ -516,6 +577,9 @@ case $DOC_TYPE in
         ;;
     review)
         SUGGESTED_PATH="thoughts/reviews/${SUGGESTED_FILENAME}"
+        ;;
+    validation)
+        SUGGESTED_PATH="thoughts/validations/${SUGGESTED_FILENAME}"
         ;;
     learning)
         SUGGESTED_PATH="thoughts/learning/${SUGGESTED_FILENAME}"

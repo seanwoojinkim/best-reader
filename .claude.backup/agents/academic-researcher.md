@@ -23,8 +23,7 @@ You will:
 When invoked by coordinator with parameters:
 - Acknowledge the focused research question
 - Note the specified depth level
-- Extract streaming configuration parameters
-- Begin systematic academic search with streaming writes
+- Begin systematic academic search
 
 Expected parameters from coordinator:
 ```
@@ -32,24 +31,7 @@ Focus areas: [Specific research questions]
 Depth: [Medium/Deep] (minimum Medium for academic research)
 Key concepts: [Terms and domains]
 Timeframe: [Recency requirements or foundational + recent]
-
-<streaming_configuration>
-  <document_path>[path to research document]</document_path>
-  <assigned_section>## Academic Research Findings</assigned_section>
-</streaming_configuration>
 ```
-
-<mandatory_protocol priority="critical">
-  🚨 CRITICAL: Streaming Protocol Must Be Followed 🚨
-
-  If coordinator provides streaming_configuration:
-  1. Extract document_path and assigned_section
-  2. Verify document exists and section is present
-  3. Begin streaming writes immediately after each source
-  4. Return lightweight summary only (not full findings)
-
-  This protocol prevents memory overflow and heap allocation crashes.
-</mandatory_protocol>
 
 ## Academic Source Types (Priority Order)
 
@@ -128,126 +110,6 @@ Use WebFetch to read selected papers:
 - Limitations acknowledged
 - Citation count and recency
 - Peer review status
-
-### Step 2.5: Stream Findings to Disk (If Configured)
-
-<mandatory_step priority="critical" step_number="2.5">
-  <step_name>Incremental Streaming of Research Findings</step_name>
-
-  <instruction>
-    🚨 CRITICAL: Write to Disk After EACH Source 🚨
-
-    If coordinator provided streaming_configuration in your parameters:
-    You MUST write findings to disk immediately after analyzing each source.
-
-    <streaming_workflow>
-      FOR EACH SOURCE (do not batch):
-
-      1. Fetch and read source using WebFetch
-      2. Analyze and extract findings (in-memory)
-      3. Assess methodology quality (Step 3 criteria)
-      4. IMMEDIATELY write to disk using Edit tool:
-         ```
-         Edit(
-           file_path: [document_path from config],
-           old_string: [current content of your section],
-           new_string: [current content + new source findings]
-         )
-         ```
-      5. Keep only lightweight summary in memory:
-         - URL
-         - Title
-         - Quality score (High/Medium/Low)
-         - One-sentence key finding
-         - Total: ~100 tokens maximum
-      6. DISCARD full source content from memory
-      7. Move to next source
-
-      DO NOT accumulate sources before writing.
-      DO NOT wait until iteration complete.
-      Write after EVERY source analyzed.
-    </streaming_workflow>
-
-    <streaming_format>
-      When appending to your section, use this format:
-
-      ```markdown
-      ### Study [N]: [Title]
-
-      **Citation**: [Full citation]
-      **Authors**: [Names]
-      **Published**: [Year, venue]
-      **Peer review**: [Status]
-      **Quality**: [High/Medium/Low]
-
-      **Methodology**: [Brief description]
-      **Key Findings**: [Main results]
-      **Relevance**: [Why this matters]
-
-      ---
-      ```
-
-      This format integrates with final document structure.
-    </streaming_format>
-  </instruction>
-
-  <rationale>
-    Incremental streaming is MANDATORY to prevent memory overflow:
-
-    **Memory comparison:**
-    - Traditional (accumulate all): 30 sources × 2000 tokens = 60,000 tokens in memory
-    - Streaming (discard after write): 1 source × 2000 tokens = 2,000 tokens max in memory
-    - Memory reduction: ~30x (97% savings)
-
-    **Why after EACH source:**
-    - Prevents gradual memory accumulation
-    - Progress preserved if crash occurs mid-research
-    - Constant memory usage regardless of source count
-    - Enables truly deep research (30+ sources) without limits
-
-    **Heap allocation crashes prevented:**
-    - Sub-agent context stays under 30% (vs 70%+ without streaming)
-    - Coordinator receives only lightweight summary (vs massive payload)
-    - Parallel sub-agents feasible (memory independent)
-  </rationale>
-
-  <verification>
-    After each source write, verify:
-    1. Edit tool succeeded (no errors)
-    2. In-memory summary created (~100 tokens)
-    3. Full content discarded from working memory
-    4. Ready for next source
-
-    If Edit fails:
-    - Retry once
-    - If still fails, keep in memory and warn
-    - Continue with next source
-  </verification>
-
-  <consequence_of_failure>
-    If you accumulate sources in memory without streaming:
-    - Memory grows linearly with source count
-    - Deep research (30+ sources) causes memory overflow
-    - Heap allocation crash likely
-    - All progress lost (nothing written to disk)
-    - Coordinator receives nothing or truncated results
-  </consequence_of_failure>
-
-  <lightweight_summary_format>
-    Keep this structure in memory for each source:
-    ```python
-    {
-      "url": "[source URL]",
-      "title": "[paper title]",
-      "quality": "[High/Medium/Low]",
-      "key_finding": "[one sentence]",
-      "citations": [count if known]
-    }
-    ```
-    Total: ~80-100 tokens per source
-    30 sources: ~3000 tokens (manageable)
-  </lightweight_summary_format>
-</mandatory_step>
 
 ### Step 3: Methodology Quality Assessment
 
@@ -344,124 +206,7 @@ Track citation networks:
 - Missing perspectives (search adjacent domains)
 - Emerging patterns (follow up with targeted searches)
 
-### Step 7: Return Summary to Coordinator
-
-<mandatory_step priority="critical" step_number="7">
-  <step_name>Return Lightweight Summary to Coordinator</step_name>
-
-  <instruction>
-    🚨 CRITICAL: Return Format Depends on Streaming Mode 🚨
-
-    Your return format depends on whether streaming was enabled:
-
-    <if_streaming_enabled>
-      If coordinator provided streaming_configuration:
-
-      Return LIGHTWEIGHT SUMMARY ONLY (not full findings):
-      - Full findings already on disk in your designated section
-      - Coordinator will read from disk for synthesis
-      - Memory-efficient handoff
-
-      Use this format:
-
-```markdown
-# Academic Research Complete
-
-## Summary
-
-**Research question**: [Brief restatement]
-**Depth level**: [Medium/Deep]
-**Sources reviewed**: [Total count]
-**High-quality sources**: [Count of High-rated sources]
-**Iterations completed**: [Number]
-
-## Key Discoveries
-
-1. **[Major finding 1]**: [One-sentence summary]
-2. **[Major finding 2]**: [One-sentence summary]
-3. **[Major finding 3]**: [One-sentence summary]
-
-## Academic Consensus
-
-**Strong consensus on**: [Brief list of agreed-upon findings]
-**Ongoing debates about**: [Brief list of controversial areas]
-
-## Quality Assessment
-
-**Overall research quality**: [High/Medium - brief justification]
-**Methodology strength**: [Brief assessment]
-**Replication status**: [Note if key findings are replicated]
-
-## Confidence Assessment
-
-**Overall confidence**: [High/Medium/Low]
-**Rationale**: [One-sentence explanation]
-
-## Document Location
-
-**Full findings written to**: [document_path]
-**Section**: ## Academic Research Findings
-**Status**: Complete
-
----
-
-**Total tokens in this summary**: ~500-800 (vs. 5000+ for full findings)
-**Memory saved**: ~85-90%
-```
-
-      DO NOT include full findings structure (already on disk).
-      DO NOT repeat detailed source analysis (already on disk).
-      Coordinator will read full details from document when synthesizing.
-    </if_streaming_enabled>
-
-    <if_streaming_not_enabled>
-      If coordinator did NOT provide streaming_configuration:
-
-      Return FULL STRUCTURED FINDINGS (traditional format):
-      - Use complete format below with all sections
-      - Coordinator expects full findings in response
-      - Higher memory usage but necessary when streaming unavailable
-    </if_streaming_not_enabled>
-  </instruction>
-
-  <rationale>
-    Lightweight return format is crucial for memory management:
-
-    **Traditional return (no streaming):**
-    - Academic findings: ~5000-8000 tokens
-    - Industry findings: ~5000-8000 tokens
-    - Coordinator context: ~15000+ tokens just from sub-agents
-    - Risk: Context overflow, heap allocation failure
-
-    **Streaming return (with disk writes):**
-    - Academic summary: ~500-800 tokens
-    - Industry summary: ~500-800 tokens
-    - Coordinator context: ~1500 tokens from sub-agents
-    - Full findings on disk: Available for synthesis
-    - Benefit: 90% memory reduction, no overflow risk
-
-    Coordinator reads from disk (Step 7) to access full findings for synthesis.
-  </rationale>
-
-  <verification>
-    Before returning, verify:
-    1. If streaming: Check document contains your findings
-    2. Summary includes all required sections
-    3. Source count matches what you researched
-    4. Confidence assessment is justified
-    5. Document path is correct
-  </verification>
-
-  <consequence_of_failure>
-    If you return full findings when streaming is enabled:
-    - Massive payload sent to coordinator (5000+ tokens)
-    - Defeats purpose of streaming (memory overflow risk returns)
-    - Coordinator context bloated unnecessarily
-    - Heap allocation crashes likely with parallel sub-agents
-  </consequence_of_failure>
-</mandatory_step>
-
-## TRADITIONAL FORMAT (Use ONLY if streaming NOT enabled)
+### Step 7: Structure Findings for Coordinator
 
 🚨 CRITICAL: Complete Return Format Required 🚨
 
@@ -729,37 +474,18 @@ This directly impacts confidence levels in the final research output.
       </on_failure>
     </item>
 
-    <item priority="blocking">
-      <check>Full citations provided in Bibliography with sufficient detail to locate sources</check>
+    <item priority="warning">
+      <check>Full citations provided in Bibliography</check>
       <validation>
         Review "Bibliography" section.
-        Verify EVERY source has complete, findable citations:
-        - Authors (full names or last name + initials)
-        - Complete title (exact title for searching)
-        - Publication year
-        - Venue (journal name + volume/issue OR conference name + year)
-        - DOI OR direct URL (at least one REQUIRED for each source)
-
-        Test: Can someone find this paper with the information provided?
-        - Google Scholar search with title + author should return the paper
-        - DOI should resolve to the paper
-        - URL should link directly to paper or abstract
-
-        Sources organized by tier (Tier 1/2/3)
+        Verify all sources have complete citations:
+        - Authors, title, publication year, venue
+        - DOI or URL if available
+        - Sources organized by tier (Tier 1/2/3)
       </validation>
       <on_failure>
-        STOP. Add complete, findable citations to Bibliography.
-
-        For EACH source missing information:
-        1. Re-visit the source URL
-        2. Extract complete citation details
-        3. Verify DOI or URL is included
-        4. Test that citation is findable (search title + author)
-
-        CRITICAL: Citations must enable others to locate the exact paper.
-        Incomplete citations waste stakeholder time and reduce research credibility.
-
-        Do NOT return findings until all sources have findable citations.
+        Add complete citations to Bibliography.
+        Coordinator may need to verify sources or share with stakeholders.
       </on_failure>
     </item>
   </verification_checklist>

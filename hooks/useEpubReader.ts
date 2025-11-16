@@ -324,20 +324,8 @@ export function useEpubReader({
     let touchStartY = 0;
     let touchStartTime = 0;
 
-    newRendition.hooks.content.register(async (contents: EpubContents) => {
+    newRendition.hooks.content.register((contents: EpubContents) => {
       const doc = contents.document;
-
-      // E-ink device detection and rendering delay
-      // Fix for Boox Palma 2 pagination skipping last page (TTS-006 Fix B)
-      // Palma2 user agent: "Mozilla/5.0 (Linux; Android 13; Palma2 Build/..."
-      const isEinkDevice = /Palma/i.test(navigator.userAgent) || /eink/i.test(navigator.userAgent);
-
-      if (isEinkDevice) {
-        // Wait for E-ink partial refresh to complete (~300-500ms)
-        // This prevents epub.js from measuring dimensions before the display updates
-        await new Promise(resolve => setTimeout(resolve, 400));
-        console.log('[useEpubReader] E-ink device detected, added 400ms rendering delay');
-      }
 
       // Swipe handlers
       const handleTouchStart = (e: TouchEvent) => {

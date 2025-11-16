@@ -101,39 +101,6 @@ export async function cfiToTimestamp(
   }
 }
 
-/**
- * Check if CFI is within chapter range
- */
-export function isCFIInChapter(
-  book: EpubBook,
-  chapter: Chapter,
-  cfi: string
-): boolean {
-  try {
-    const locations = getEpubLocations(book);
-    if (!locations?.cfiComparison) return false;
-
-    const startComparison = locations.cfiComparison(cfi, chapter.cfiStart);
-    const endComparison = locations.cfiComparison(cfi, chapter.cfiEnd);
-
-    return startComparison >= 0 && endComparison <= 0;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Find chapter containing given CFI
- */
-export function findChapterByCFI(
-  book: EpubBook,
-  chapters: Chapter[],
-  cfi: string
-): Chapter | null {
-  for (const chapter of chapters) {
-    if (isCFIInChapter(book, chapter, cfi)) {
-      return chapter;
-    }
-  }
-  return null;
-}
+// Chapter boundary utilities have been moved to lib/chapter-utils.ts
+// Re-export for backward compatibility with existing imports
+export { isHrefInChapter, findChapterByHref, findChapterByCFI } from './chapter-utils';

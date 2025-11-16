@@ -184,8 +184,8 @@ export async function extractChapters(
         charCount = text.length;
         wordCount = estimateWordCount(text);
 
-        // Use the spine section's href for navigation
-        // rendition.display() works best with spine hrefs, not partial CFIs
+        // Store HREF for navigation (rendition.display needs this)
+        // Note: We'll add CFI support separately for boundary detection
         if ((section as any).href) {
           cfiStart = (section as any).href;
           console.log('[extractChapters] Using spine href for:', item.label, '→', cfiStart);
@@ -217,7 +217,7 @@ export async function extractChapters(
       level,
     });
 
-    console.log(`[extractChapters] Added chapter #${order}: "${item.label}" (level ${level}, href: ${cfiStart})`);
+    console.log(`[extractChapters] Added chapter #${order}: "${item.label}" (level ${level}, cfi: ${cfiStart})`);
 
     let currentOrder = order + 1;
 
