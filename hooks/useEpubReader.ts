@@ -14,7 +14,7 @@ import {
 interface UseEpubReaderProps {
   bookBlob: Blob | null;
   containerRef: React.RefObject<HTMLDivElement>;
-  onLocationChange?: (cfi: string, percentage: number) => void;
+  onLocationChange?: (cfi: string, percentage: number, href?: string) => void;
 }
 
 /**
@@ -324,8 +324,20 @@ export function useEpubReader({
     let touchStartY = 0;
     let touchStartTime = 0;
 
-    newRendition.hooks.content.register((contents: EpubContents) => {
+    newRendition.hooks.content.register(async (contents: EpubContents) => {
       const doc = contents.document;
+
+      // E-ink device detection and rendering delay
+      // Fix for Boox Palma 2 pagination skipping last page (TTS-006 Fix B)
+      // Palma2 user agent: "Mozilla/5.0 (Linux; Android 13; Palma2 Build/..."
+      const isEinkDevice = /Palma/i.test(navigator.userAgent) || /eink/i.test(navigator.userAgent);
+
+      if (isEinkDevice) {
+        // Wait for E-ink partial refresh to complete (~300-500ms)
+        // This prevents epub.js from measuring dimensions before the display updates
+        await new Promise(resolve => setTimeout(resolve, 400));
+        console.log('[useEpubReader] E-ink device detected, added 400ms rendering delay');
+      }
 
       // Swipe handlers
       const handleTouchStart = (e: TouchEvent) => {
@@ -432,10 +444,20 @@ export function useEpubReader({
       'body *': {
         'font-size': 'inherit !important',
       },
+      // Force text-align on all elements (nuclear option, but needed for embedded CSS like .tx)
+      'body, body *': {
+        'text-align': 'justify !important',
+      },
       p: {
         'margin-bottom': '1em !important',
-        'text-align': 'justify !important',
-        'text-justify': 'inter-word !important', // Better justification on Android
+      },
+      // Preserve semantic formatting
+      'code, pre, kbd, samp': {
+        'text-align': 'left !important',
+        'font-family': 'monospace !important',
+      },
+      'h1, h2, h3, h4, h5, h6': {
+        'text-align': 'left !important', // Keep headings left-aligned
       },
       a: {
         color: `${colors.text} !important`,
@@ -563,14 +585,16 @@ export function useEpubReader({
 
     const handleRelocated = (location: EpubLocation) => {
       const cfi = location.start.cfi;
+      const href = location.start.href;
       setCurrentLocation(cfi);
 
-      // Calculate progress percentage
+      // Calculate progress percentage (keep decimal precision for accurate calculations)
       const percentage = book?.locations?.percentageFromCfi(cfi) || 0;
-      const progressPercent = Math.round(percentage * 100);
+      const progressPercent = percentage * 100;
 
       console.log('[useEpubReader] Location changed:', {
         cfi: cfi.substring(0, 50) + '...',
+        href,
         percentage,
         progressPercent,
         hasLocations: !!book?.locations,
@@ -579,7 +603,7 @@ export function useEpubReader({
 
       setProgress(progressPercent);
 
-      onLocationChange?.(cfi, percentage);
+      onLocationChange?.(cfi, percentage, href);
     };
 
     rendition.on('relocated', handleRelocated);

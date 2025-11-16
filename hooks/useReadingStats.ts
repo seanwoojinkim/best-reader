@@ -3,7 +3,7 @@ import { calculateTimeRemaining, calculatePagesPerMinute, formatTimeRemaining } 
 
 interface UseReadingStatsProps {
   totalLocations: number;
-  currentLocation: number;
+  progress: number; // 0-100, from book.locations.percentageFromCfi(cfi)
   pagesRead: number;
   sessionStartTime: Date;
 }
@@ -22,7 +22,7 @@ interface ReadingStats {
  */
 export function useReadingStats({
   totalLocations,
-  currentLocation,
+  progress,
   pagesRead,
   sessionStartTime,
 }: UseReadingStatsProps): ReadingStats {
@@ -35,12 +35,8 @@ export function useReadingStats({
   });
 
   const calculateStats = useCallback(() => {
-    // Calculate progress percentage
-    const progress = totalLocations > 0 ? (currentLocation / totalLocations) * 100 : 0;
-
     // Calculate pages remaining (estimate based on current position)
-    const estimatedTotalPages = totalLocations; // Simplified: 1 location = 1 page
-    const pagesRemaining = Math.max(0, estimatedTotalPages - pagesRead);
+    const pagesRemaining = Math.ceil(totalLocations * (1 - (progress / 100)));
 
     // Calculate reading speed (pages per minute)
     const now = new Date();
@@ -63,7 +59,7 @@ export function useReadingStats({
       timeRemainingMinutes,
       pagesPerMinute,
     });
-  }, [totalLocations, currentLocation, pagesRead, sessionStartTime]);
+  }, [totalLocations, progress, pagesRead, sessionStartTime]);
 
   // Recalculate stats whenever inputs change
   useEffect(() => {

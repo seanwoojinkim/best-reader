@@ -13,7 +13,8 @@ import { useAudioPlayer } from '@/hooks/useAudioPlayer';
 import { useAudioGeneration } from '@/hooks/useAudioGeneration';
 import { useSentenceSync } from '@/hooks/useSentenceSync';
 import { getAudioSettings, getDefaultAudioSettings } from '@/lib/db';
-import { timestampToCFI, cfiToTimestamp, findChapterByCFI } from '@/lib/audio-sync';
+import { timestampToCFI, cfiToTimestamp } from '@/lib/audio-sync';
+import { findChapterByCFI } from '@/lib/chapter-utils';
 import { SentenceHighlighter } from '@/lib/sentence-highlighter';
 import type { Chapter, AudioSettings, SentenceSyncData } from '@/types';
 import { UI_CONSTANTS } from '@/lib/constants';
@@ -63,7 +64,22 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
     useEpubReader({
       bookBlob,
       containerRef,
-      onLocationChange: async (cfi, percentage) => {
+      onLocationChange: async (cfi, percentage, href) => {
+        // Log chapter boundary detection
+        if (book && chapters.length > 0) {
+          const currentChapter = findChapterByCFI(book, chapters, cfi, href);
+          console.log('[PAGINATION] Chapter detection:', {
+            cfi: cfi.substring(0, 80),
+            href,
+            percentage: (percentage * 100).toFixed(2) + '%',
+            chapterFound: !!currentChapter,
+            chapterId: currentChapter?.id,
+            chapterTitle: currentChapter?.title,
+            chapterOrder: currentChapter?.order,
+            totalChapters: chapters.length
+          });
+        }
+
         // Save position to database with error handling
         try {
           await savePosition({
@@ -90,7 +106,7 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
   // Reading stats for progress indicators (Phase 3)
   const stats = useReadingStats({
     totalLocations: totalLocations || 0,
-    currentLocation: currentLocation ? 1 : 0, // Simplified for now
+    progress: progress,
     pagesRead,
     sessionStartTime,
   });
