@@ -134,7 +134,7 @@ export function useHighlights({ bookId, rendition }: UseHighlightsProps) {
         return newHighlight;
       } catch (error) {
         console.error('Failed to save highlight:', error);
-        // TODO Phase 3: Show toast notification to user
+        // Error logged to console - toast notification not implemented
       } finally {
         // Always clear selection to reset UI
         if (rendition) {
@@ -158,7 +158,7 @@ export function useHighlights({ bookId, rendition }: UseHighlightsProps) {
         setEditingNote(null);
       } catch (error) {
         console.error('Failed to update highlight note:', error);
-        // TODO Phase 3: Show toast notification to user
+        // Error logged to console - toast notification not implemented
       }
     },
     [bookId]
@@ -176,7 +176,7 @@ export function useHighlights({ bookId, rendition }: UseHighlightsProps) {
         setEditingNote(null);
       } catch (error) {
         console.error('Failed to delete highlight:', error);
-        // TODO Phase 3: Show toast notification to user
+        // Error logged to console - toast notification not implemented
       }
     },
     [bookId]
@@ -193,7 +193,7 @@ export function useHighlights({ bookId, rendition }: UseHighlightsProps) {
         setHighlights(updatedHighlights);
       } catch (error) {
         console.error('Failed to change highlight color:', error);
-        // TODO Phase 3: Show toast notification to user
+        // Error logged to console - toast notification not implemented
       }
     },
     [bookId]

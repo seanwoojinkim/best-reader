@@ -53,7 +53,7 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
   const syncInProgressRef = useRef<boolean>(false); // Prevent concurrent sync operations
   const { showControls, toggleControls, setShowControls } = useSettingsStore();
 
-  const { book, rendition, loading, currentLocation, progress, totalLocations, nextPage, prevPage, goToLocation } =
+  const { book, rendition, loading, currentLocation, currentHref, progress, totalLocations, nextPage, prevPage, goToLocation } =
     useEpubReader({
       bookBlob,
       containerRef,
@@ -191,7 +191,7 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
             console.warn('[TTS Auto-Advance] Next chapter has no id, stopping playback');
             setCurrentAudioChapter(null);
             trackListeningTime(false);
-            // TODO: Could show toast notification to user
+            // User notification not implemented - playback stops silently
             return;
           }
 
@@ -211,11 +211,11 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
               goToLocation(nextChapter.cfiStart);
             }
           } else {
-            // Next chapter has no audio - stop playback with user feedback
+            // Next chapter has no audio - stop playback
             console.warn('[TTS Auto-Advance] Next chapter has no audio, stopping playback');
             setCurrentAudioChapter(null);
             trackListeningTime(false);
-            // TODO: Could show toast notification to user
+            // User notification not implemented - playback stops silently
           }
         } else {
           // Last chapter or chapter not found - stop playback
@@ -227,7 +227,7 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
         console.error('[TTS Auto-Advance] Error during auto-advance:', error);
         setCurrentAudioChapter(null);
         trackListeningTime(false);
-        // TODO: Could show error toast to user
+        // User notification not implemented - error logged to console
       }
     },
   });
@@ -255,7 +255,7 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
 
     try {
       // Check if current reading position is in current audio chapter
-      const currentChapter = findChapterByCFI(book, chapters, currentLocation);
+      const currentChapter = findChapterByCFI(book, chapters, currentLocation, currentHref);
 
       if (currentChapter?.id !== currentAudioChapter.id && currentChapter?.id) {
         // Different chapter - check if it has audio and switch if available
@@ -273,7 +273,7 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
       // Always reset the flag, even if error occurs
       syncInProgressRef.current = false;
     }
-  }, [currentAudioChapter, book, currentLocation, chapters, audioPlayer]);
+  }, [currentAudioChapter, book, currentLocation, currentHref, chapters, audioPlayer]);
 
   // Sync when user navigates pages while audio is playing
   useEffect(() => {

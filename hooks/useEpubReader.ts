@@ -138,6 +138,7 @@ export function useEpubReader({
   const [rendition, setRendition] = useState<Rendition | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentLocation, setCurrentLocation] = useState<string>('');
+  const [currentHref, setCurrentHref] = useState<string>('');
   const [progress, setProgress] = useState(0);
   const [totalLocations, setTotalLocations] = useState<number>(0);
 
@@ -605,6 +606,7 @@ export function useEpubReader({
       const cfi = location.start.cfi;
       const href = location.start.href;
       setCurrentLocation(cfi);
+      setCurrentHref(href);
 
       // Calculate progress percentage (keep decimal precision for accurate calculations)
       const percentage = book?.locations?.percentageFromCfi(cfi) || 0;
@@ -670,6 +672,7 @@ export function useEpubReader({
     rendition,
     loading,
     currentLocation,
+    currentHref,
     progress,
     totalLocations,
     nextPage,

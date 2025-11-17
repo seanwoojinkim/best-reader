@@ -126,9 +126,8 @@ export function handleFontError(
 
     case ErrorSeverity.TOAST:
       console.warn(logMessage);
-      // TODO: Show toast notification when toast system is available
-      // For now, fall back to console
-      console.info(`[Toast would show]: ${message}`);
+      // Toast notification system not implemented - using console fallback
+      console.info(`[User notification]: ${message}`);
       break;
 
     case ErrorSeverity.ALERT:

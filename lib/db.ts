@@ -56,7 +56,7 @@ export class ReaderDatabase extends Dexie {
       audioFiles: '++id, chapterId, generatedAt',
       audioSettings: 'bookId, updatedAt',
       audioUsage: '++id, chapterId, bookId, timestamp',
-      sentenceSyncData: '++id, audioFileId, chapterId, generatedAt',
+      sentenceSyncData: '++id, audioFileId, chapterId, generatedAt', // DEPRECATED: Feature removed, kept for backward compatibility
     });
 
     // Version 5: Add custom fonts (Phase 1 & 2: Font Management)
@@ -70,8 +70,34 @@ export class ReaderDatabase extends Dexie {
       audioFiles: '++id, chapterId, generatedAt',
       audioSettings: 'bookId, updatedAt',
       audioUsage: '++id, chapterId, bookId, timestamp',
-      sentenceSyncData: '++id, audioFileId, chapterId, generatedAt',
+      sentenceSyncData: '++id, audioFileId, chapterId, generatedAt', // DEPRECATED: Feature removed, kept for backward compatibility
       customFonts: '++id, name, family, uploadDate',
+    });
+
+    // Version 6: Cleanup orphaned sentence sync data (deprecated feature removed)
+    this.version(6).stores({
+      books: '++id, title, author, addedAt, lastOpenedAt, *tags',
+      positions: 'bookId, updatedAt',
+      sessions: '++id, bookId, startTime, endTime',
+      highlights: '++id, bookId, cfiRange, color, createdAt',
+      analytics: '++id, sessionId, bookId, timestamp, event',
+      chapters: '++id, bookId, order, cfiStart',
+      audioFiles: '++id, chapterId, generatedAt',
+      audioSettings: 'bookId, updatedAt',
+      audioUsage: '++id, chapterId, bookId, timestamp',
+      sentenceSyncData: '++id, audioFileId, chapterId, generatedAt', // DEPRECATED: kept for backward compatibility
+      customFonts: '++id, name, family, uploadDate',
+    }).upgrade(async (trans) => {
+      // Clean up orphaned sentence sync data from removed feature
+      // Table structure preserved for backward compatibility
+      console.log('[DB Migration v6] Cleaning up sentence sync data...');
+      const count = await trans.table('sentenceSyncData').count();
+      if (count > 0) {
+        await trans.table('sentenceSyncData').clear();
+        console.log(`[DB Migration v6] Cleared ${count} orphaned sentence sync records`);
+      } else {
+        console.log('[DB Migration v6] No sentence sync data to clean');
+      }
     });
   }
 }
