@@ -1,5 +1,5 @@
 import Dexie, { Table } from 'dexie';
-import type { Book, ReadingPosition, Session, Highlight, Analytics, Chapter, AudioFile, AudioSettings, AudioUsage, SentenceSyncData, CustomFont } from '@/types';
+import type { Book, ReadingPosition, Session, Highlight, Analytics, Chapter, AudioFile, AudioSettings, AudioUsage, CustomFont } from '@/types';
 
 export class ReaderDatabase extends Dexie {
   books!: Table<Book, number>;
@@ -11,7 +11,6 @@ export class ReaderDatabase extends Dexie {
   audioFiles!: Table<AudioFile, number>;
   audioSettings!: Table<AudioSettings, number>;
   audioUsage!: Table<AudioUsage, number>;
-  sentenceSyncData!: Table<SentenceSyncData, number>;
   customFonts!: Table<CustomFont, number>;
 
   constructor() {
@@ -128,18 +127,8 @@ export async function deleteBook(id: number): Promise<void> {
   const chapters = await db.chapters.where('bookId').equals(id).toArray();
   const chapterIds = chapters.map(c => c.id).filter((id): id is number => id !== undefined);
 
-  // Delete all audio files and sentence sync data for these chapters in one batch operation
+  // Delete all audio files for these chapters
   if (chapterIds.length > 0) {
-    // Get all audio files for these chapters
-    const audioFiles = await db.audioFiles.where('chapterId').anyOf(chapterIds).toArray();
-    const audioFileIds = audioFiles.map(a => a.id).filter((id): id is number => id !== undefined);
-
-    // Delete sentence sync data for these audio files
-    if (audioFileIds.length > 0) {
-      await db.sentenceSyncData.where('audioFileId').anyOf(audioFileIds).delete();
-    }
-
-    // Delete audio files
     await db.audioFiles.where('chapterId').anyOf(chapterIds).delete();
   }
 
@@ -193,7 +182,6 @@ export async function clearAllData(): Promise<void> {
   await db.audioFiles.clear();
   await db.audioSettings.clear();
   await db.audioUsage.clear();
-  await db.sentenceSyncData.clear();
 }
 
 // ============================================================
@@ -424,10 +412,6 @@ export async function getAudioFile(chapterId: number): Promise<AudioFile | undef
  * Delete audio file for a chapter
  */
 export async function deleteAudioFile(chapterId: number): Promise<void> {
-  const audioFile = await getAudioFile(chapterId);
-  if (audioFile?.id) {
-    await deleteSentenceSyncData(audioFile.id);
-  }
   await db.audioFiles.where('chapterId').equals(chapterId).delete();
 }
 
@@ -506,43 +490,6 @@ export function getDefaultAudioSettings(bookId: number): AudioSettings {
     autoPlay: false,
     updatedAt: new Date(),
   };
-}
-
-// ============================================================
-// Sentence Synchronization Functions (TTS Phase: Sentence Sync)
-// ============================================================
-
-/**
- * Save sentence sync data for an audio file
- */
-export async function saveSentenceSyncData(
-  data: Omit<SentenceSyncData, 'id'>
-): Promise<number> {
-  return await db.sentenceSyncData.add(data);
-}
-
-/**
- * Get sentence sync data for an audio file
- */
-export async function getSentenceSyncData(
-  audioFileId: number
-): Promise<SentenceSyncData | undefined> {
-  return await db.sentenceSyncData
-    .where('audioFileId')
-    .equals(audioFileId)
-    .first();
-}
-
-/**
- * Delete sentence sync data when audio is deleted
- */
-export async function deleteSentenceSyncData(
-  audioFileId: number
-): Promise<void> {
-  await db.sentenceSyncData
-    .where('audioFileId')
-    .equals(audioFileId)
-    .delete();
 }
 
 // ============================================================

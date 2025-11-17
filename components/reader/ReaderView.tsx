@@ -3,7 +3,7 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { useSettingsStore } from '@/stores/settingsStore';
-import { savePosition, getAudioFile, getSentenceSyncData } from '@/lib/db';
+import { savePosition, getAudioFile } from '@/lib/db';
 import { useEpubReader } from '@/hooks/useEpubReader';
 import { useHighlights } from '@/hooks/useHighlights';
 import { useSession } from '@/hooks/useSession';
@@ -11,12 +11,9 @@ import { useReadingStats } from '@/hooks/useReadingStats';
 import { useChapters } from '@/hooks/useChapters';
 import { useAudioPlayer } from '@/hooks/useAudioPlayer';
 import { useAudioGeneration } from '@/hooks/useAudioGeneration';
-import { useSentenceSync } from '@/hooks/useSentenceSync';
 import { getAudioSettings, getDefaultAudioSettings } from '@/lib/db';
-import { timestampToCFI, cfiToTimestamp } from '@/lib/audio-sync';
 import { findChapterByCFI } from '@/lib/chapter-utils';
-import { SentenceHighlighter } from '@/lib/sentence-highlighter';
-import type { Chapter, AudioSettings, SentenceSyncData } from '@/types';
+import type { Chapter, AudioSettings } from '@/types';
 import { UI_CONSTANTS } from '@/lib/constants';
 import type { HighlightColor } from '@/lib/constants';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
@@ -53,11 +50,7 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
   const [showChapterList, setShowChapterList] = useState(false);
   const [currentAudioChapter, setCurrentAudioChapter] = useState<Chapter | null>(null);
   const [audioSettings, setAudioSettings] = useState<AudioSettings | null>(null);
-  const [syncEnabled, setSyncEnabled] = useState(true); // TTS Phase 4: Audio-reading sync toggle
-  const lastSyncTimeRef = useRef<number>(0); // TTS Phase 4: Rate limit sync updates
   const syncInProgressRef = useRef<boolean>(false); // Prevent concurrent sync operations
-  const [sentenceSyncData, setSentenceSyncData] = useState<SentenceSyncData | null>(null); // TTS Phase: Sentence Sync
-  const highlighterRef = useRef<SentenceHighlighter | null>(null); // TTS Phase: Sentence Sync
   const { showControls, toggleControls, setShowControls } = useSettingsStore();
 
   const { book, rendition, loading, currentLocation, progress, totalLocations, nextPage, prevPage, goToLocation } =
@@ -164,58 +157,12 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
     loadAudioSettings();
   }, [loadAudioSettings]);
 
-  // Load sentence sync data when audio chapter changes (TTS Phase: Sentence Sync)
-  useEffect(() => {
-    const loadSentenceData = async () => {
-      if (!currentAudioChapter?.id) {
-        setSentenceSyncData(null);
-        return;
-      }
-
-      try {
-        const audioFile = await getAudioFile(currentAudioChapter.id);
-        if (audioFile?.id) {
-          const data = await getSentenceSyncData(audioFile.id);
-          setSentenceSyncData(data || null);
-          console.log(`[TTS Sentence Sync] Loaded ${data?.sentences.length || 0} sentences for chapter`);
-        }
-      } catch (error) {
-        console.error('[TTS Sentence Sync] Failed to load sentence data:', error);
-        setSentenceSyncData(null);
-      }
-    };
-
-    loadSentenceData();
-  }, [currentAudioChapter]);
-
-  // Initialize highlighter when rendition is ready (TTS Phase: Sentence Sync)
-  useEffect(() => {
-    if (rendition && !highlighterRef.current) {
-      highlighterRef.current = new SentenceHighlighter(rendition);
-      console.log('[TTS Sentence Sync] Highlighter initialized');
-    }
-  }, [rendition]);
-
-  // Wrap sentences when data is loaded (TTS Phase: Sentence Sync)
-  useEffect(() => {
-    if (highlighterRef.current && sentenceSyncData && currentAudioChapter) {
-      highlighterRef.current.wrapSentences(sentenceSyncData.sentences);
-    }
-  }, [sentenceSyncData, currentAudioChapter]);
-
-  // Audio playback (TTS Phase 3, Phase 4: with sync)
+  // Audio playback (TTS Phase 3)
   const audioPlayer = useAudioPlayer({
     chapter: currentAudioChapter,
     onTimeUpdate: async (currentTime, duration) => {
-      // TTS Phase 4: Sync audio → reading position (every 5 seconds to avoid excessive updates)
-      const now = Date.now();
-      if (syncEnabled && currentAudioChapter && book && now - lastSyncTimeRef.current > 5000) {
-        const cfi = await timestampToCFI(book, currentAudioChapter, currentTime, duration);
-        if (cfi && goToLocation) {
-          goToLocation(cfi);
-          lastSyncTimeRef.current = now;
-        }
-      }
+      // No sync needed - audio and reading are independent
+      // Chapter switching happens via syncReadingToAudio when user navigates
     },
     onEnded: async () => {
       try {
@@ -294,28 +241,9 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
     trackListeningTime(audioPlayer.playing);
   }, [audioPlayer.playing, trackListeningTime]);
 
-  // Use sentence sync hook to track current sentence (TTS Phase: Sentence Sync)
-  const { currentSentenceIndex } = useSentenceSync({
-    sentences: sentenceSyncData?.sentences || null,
-    currentTime: audioPlayer.currentTime,
-    playing: audioPlayer.playing,
-    onSentenceChange: (index) => {
-      if (highlighterRef.current && sentenceSyncData) {
-        highlighterRef.current.highlightSentence(index, sentenceSyncData.sentences);
-      }
-    },
-  });
-
-  // Clear highlight when audio stops (TTS Phase: Sentence Sync)
-  useEffect(() => {
-    if (!audioPlayer.playing && highlighterRef.current) {
-      highlighterRef.current.clearHighlight();
-    }
-  }, [audioPlayer.playing]);
-
-  // TTS Phase 4: Sync reading → audio position when user navigates
+  // TTS Phase 4: Sync reading → audio (chapter switching only)
   const syncReadingToAudio = useCallback(async () => {
-    if (!syncEnabled || !currentAudioChapter || !book || !currentLocation) return;
+    if (!currentAudioChapter || !book || !currentLocation) return;
 
     // Prevent concurrent sync operations - CRITICAL FIX
     if (syncInProgressRef.current) {
@@ -329,13 +257,7 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
       // Check if current reading position is in current audio chapter
       const currentChapter = findChapterByCFI(book, chapters, currentLocation);
 
-      if (currentChapter?.id === currentAudioChapter.id) {
-        // Same chapter - sync timestamp
-        const timestamp = await cfiToTimestamp(book, currentAudioChapter, currentLocation, audioPlayer.duration);
-        if (timestamp !== null) {
-          audioPlayer.seek(timestamp);
-        }
-      } else if (currentChapter?.id) {
+      if (currentChapter?.id !== currentAudioChapter.id && currentChapter?.id) {
         // Different chapter - check if it has audio and switch if available
         const audioFile = await getAudioFile(currentChapter.id);
         if (audioFile) {
@@ -351,15 +273,15 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
       // Always reset the flag, even if error occurs
       syncInProgressRef.current = false;
     }
-  }, [syncEnabled, currentAudioChapter, book, currentLocation, chapters, audioPlayer]);
+  }, [currentAudioChapter, book, currentLocation, chapters, audioPlayer]);
 
   // Sync when user navigates pages while audio is playing
   useEffect(() => {
-    // Only sync if audio is actually playing AND sync is enabled AND there's an audio chapter
-    if (audioPlayer.playing && syncEnabled && currentAudioChapter && currentLocation) {
+    // Only sync if audio is actually playing AND there's an audio chapter
+    if (audioPlayer.playing && currentAudioChapter && currentLocation) {
       syncReadingToAudio();
     }
-  }, [currentLocation, syncReadingToAudio, audioPlayer.playing, syncEnabled, currentAudioChapter]);
+  }, [currentLocation, syncReadingToAudio, audioPlayer.playing, currentAudioChapter]);
 
   // Auto-hide controls after configured delay
   useEffect(() => {
@@ -718,8 +640,6 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
           onSeek={audioPlayer.seek}
           onSpeedChange={audioPlayer.setSpeed}
           onClose={() => setCurrentAudioChapter(null)}
-          syncEnabled={syncEnabled}
-          onToggleSync={() => setSyncEnabled(!syncEnabled)}
           readingProgress={progress}
           pagesRemaining={stats.pagesRemaining}
           timeRemaining={stats.timeRemaining}
