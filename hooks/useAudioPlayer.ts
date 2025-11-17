@@ -20,6 +20,7 @@ interface UseAudioPlayerResult {
   seek: (time: number) => void;
   setSpeed: (speed: number) => void;
   loadChapter: (chapter: Chapter) => Promise<void>;
+  prepareAutoPlay: (chapterId: number) => void;
 }
 
 export function useAudioPlayer({
@@ -37,6 +38,17 @@ export function useAudioPlayer({
   const currentObjectUrlRef = useRef<string | null>(null);
   const loadedChapterIdRef = useRef<number | undefined>(undefined);
 
+  // Store latest callbacks in refs to avoid stale closures in event listeners
+  const onEndedRef = useRef(onEnded);
+  const onTimeUpdateRef = useRef(onTimeUpdate);
+  const autoPlayChapterIdRef = useRef<number | undefined>(undefined); // Chapter ID for auto-advance playback
+
+  // Update refs when callbacks change
+  useEffect(() => {
+    onEndedRef.current = onEnded;
+    onTimeUpdateRef.current = onTimeUpdate;
+  }, [onEnded, onTimeUpdate]);
+
   // Initialize audio element - only create once, never recreate
   useEffect(() => {
     console.log('[useAudioPlayer] Initializing audio element');
@@ -46,7 +58,7 @@ export function useAudioPlayer({
     // Event listeners
     const handleTimeUpdate = () => {
       setCurrentTime(audio.currentTime);
-      onTimeUpdate?.(audio.currentTime, audio.duration);
+      onTimeUpdateRef.current?.(audio.currentTime, audio.duration);
     };
 
     const handleLoadedMetadata = () => {
@@ -58,8 +70,9 @@ export function useAudioPlayer({
     };
 
     const handleEnded = () => {
+      console.log('[useAudioPlayer] Audio ended, setting playing to false');
       setPlaying(false);
-      onEnded?.();
+      onEndedRef.current?.();
     };
 
     const handleError = (e: ErrorEvent) => {
@@ -125,12 +138,8 @@ export function useAudioPlayer({
         blobType: audioFile.blob?.type
       });
 
-      // Revoke previous object URL to prevent memory leak
-      if (currentObjectUrlRef.current) {
-        console.log('[useAudioPlayer] Revoking previous object URL:', currentObjectUrlRef.current);
-        URL.revokeObjectURL(currentObjectUrlRef.current);
-        currentObjectUrlRef.current = null;
-      }
+      // Store reference to old URL for delayed cleanup (prevent premature revocation)
+      const oldObjectUrl = currentObjectUrlRef.current;
 
       // Prefer ArrayBuffer (iOS compatible) over Blob (may be invalid on iOS)
       let audioBlob: Blob;
@@ -164,8 +173,13 @@ export function useAudioPlayer({
 
       console.log('[useAudioPlayer] load() called, waiting for loadedmetadata event...');
 
-      // Don't revoke the object URL immediately - the audio element needs it!
-      // It will be cleaned up when the component unmounts or a new chapter loads
+      // Revoke old URL after new one is set - delay to ensure audio element fully loads
+      if (oldObjectUrl) {
+        setTimeout(() => {
+          console.log('[useAudioPlayer] Revoking old object URL after new chapter loaded:', oldObjectUrl);
+          URL.revokeObjectURL(oldObjectUrl);
+        }, 1000);
+      }
     } catch (err) {
       console.error('[useAudioPlayer] Error loading chapter audio:', err);
       setError(err instanceof Error ? err.message : 'Failed to load audio');
@@ -176,8 +190,32 @@ export function useAudioPlayer({
   // Auto-load chapter when it changes (compare by ID to avoid reloading on reference changes)
   useEffect(() => {
     if (chapter && chapter.id !== loadedChapterIdRef.current) {
+      const expectedChapterId = autoPlayChapterIdRef.current;
+      console.log('[useAudioPlayer] Chapter changing, expectedChapterId for auto-play:', expectedChapterId, 'new chapter ID:', chapter.id);
       loadedChapterIdRef.current = chapter.id;
-      loadChapter(chapter);
+
+      loadChapter(chapter).then(() => {
+        // Auto-resume only if this is the expected chapter (prevents race condition)
+        console.log('[useAudioPlayer] Chapter loaded, checking auto-resume. expectedChapterId:', expectedChapterId, 'loaded chapter ID:', chapter.id, 'hasAudio:', !!audioRef.current);
+        if (expectedChapterId === chapter.id && audioRef.current) {
+          console.log('[useAudioPlayer] Auto-resuming playback after chapter change');
+          autoPlayChapterIdRef.current = undefined; // Reset flag after use
+          audioRef.current.play()
+            .then(() => {
+              console.log('[useAudioPlayer] Auto-resume successful');
+              setPlaying(true); // Ensure state syncs
+            })
+            .catch(err => {
+              console.error('[useAudioPlayer] Auto-resume failed (iOS may block):', err);
+              setPlaying(false); // Ensure state syncs on error
+            });
+        } else {
+          console.log('[useAudioPlayer] Not auto-resuming:', { expectedChapterId, loadedChapterId: chapter.id, hasAudio: !!audioRef.current });
+          if (expectedChapterId !== undefined) {
+            autoPlayChapterIdRef.current = undefined; // Reset flag even if chapter doesn't match
+          }
+        }
+      });
     }
   }, [chapter, loadChapter]);
 
@@ -238,6 +276,7 @@ export function useAudioPlayer({
 
   const pause = useCallback(() => {
     if (audioRef.current) {
+      console.log('[useAudioPlayer] Pause called, setting playing to false');
       audioRef.current.pause();
       setPlaying(false);
     }
@@ -257,6 +296,11 @@ export function useAudioPlayer({
     }
   }, []);
 
+  const prepareAutoPlay = useCallback((chapterId: number) => {
+    console.log('[useAudioPlayer] prepareAutoPlay called for chapter ID:', chapterId);
+    autoPlayChapterIdRef.current = chapterId;
+  }, []);
+
   return {
     playing,
     currentTime,
@@ -269,5 +313,6 @@ export function useAudioPlayer({
     seek,
     setSpeed,
     loadChapter,
+    prepareAutoPlay,
   };
 }

@@ -144,6 +144,16 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
     }
   }, [chapters]);
 
+  // Debug log for currentAudioChapter changes
+  useEffect(() => {
+    console.log('[DEBUG] currentAudioChapter changed:', {
+      id: currentAudioChapter?.id,
+      title: currentAudioChapter?.title,
+      cfiStart: currentAudioChapter?.cfiStart,
+      fullChapter: currentAudioChapter
+    });
+  }, [currentAudioChapter]);
+
   // Load audio settings (TTS Phase 3)
   const loadAudioSettings = useCallback(async () => {
     const settings = await getAudioSettings(bookId) || getDefaultAudioSettings(bookId);
@@ -208,44 +218,69 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
       }
     },
     onEnded: async () => {
-      // Auto-advance to next chapter if available
-      const currentIndex = chapters.findIndex(ch => ch.id === currentAudioChapter?.id);
-      const hasNextChapter = currentIndex >= 0 && currentIndex < chapters.length - 1;
+      try {
+        // Auto-advance to next chapter if available
+        // Match by cfiStart since chapters may not have database IDs yet
+        const currentIndex = chapters.findIndex(ch =>
+          ch.id ? ch.id === currentAudioChapter?.id : ch.cfiStart === currentAudioChapter?.cfiStart
+        );
+        const hasNextChapter = currentIndex >= 0 && currentIndex < chapters.length - 1;
 
-      if (hasNextChapter) {
-        const nextChapter = chapters[currentIndex + 1];
+        console.log('[TTS Auto-Advance] Debug info:', {
+          currentAudioChapterId: currentAudioChapter?.id,
+          currentAudioChapterCfi: currentAudioChapter?.cfiStart,
+          currentAudioChapterTitle: currentAudioChapter?.title,
+          currentIndex,
+          totalChapters: chapters.length,
+          hasNextChapter,
+          chapterIds: chapters.map(ch => ({ id: ch.id, cfiStart: ch.cfiStart, title: ch.title }))
+        });
 
-        // Check if next chapter has audio generated (skip if no id)
-        if (!nextChapter.id) {
-          console.log(`[TTS Auto-Advance] Next chapter has no id, stopping playback`);
-          setCurrentAudioChapter(null);
-          trackListeningTime(false);
-          return;
-        }
+        if (hasNextChapter) {
+          const nextChapter = chapters[currentIndex + 1];
 
-        const audioFile = await getAudioFile(nextChapter.id);
+          // Check if next chapter has audio generated (skip if no id)
+          if (!nextChapter.id) {
+            console.warn('[TTS Auto-Advance] Next chapter has no id, stopping playback');
+            setCurrentAudioChapter(null);
+            trackListeningTime(false);
+            // TODO: Could show toast notification to user
+            return;
+          }
 
-        if (audioFile) {
-          console.log(`[TTS Auto-Advance] Moving to next chapter: ${nextChapter.title}`);
+          const audioFile = await getAudioFile(nextChapter.id);
 
-          // Auto-advance to next chapter
-          setCurrentAudioChapter(nextChapter);
+          if (audioFile) {
+            console.log(`[TTS Auto-Advance] Moving to next chapter: ${nextChapter.title}`);
 
-          // Navigate reader to next chapter start
-          if (goToLocation && nextChapter.cfiStart) {
-            goToLocation(nextChapter.cfiStart);
+            // Signal auto-play before changing chapter (with chapter ID to prevent race condition)
+            audioPlayer.prepareAutoPlay(nextChapter.id);
+
+            // Auto-advance to next chapter
+            setCurrentAudioChapter(nextChapter);
+
+            // Navigate reader to next chapter start
+            if (goToLocation && nextChapter.cfiStart) {
+              goToLocation(nextChapter.cfiStart);
+            }
+          } else {
+            // Next chapter has no audio - stop playback with user feedback
+            console.warn('[TTS Auto-Advance] Next chapter has no audio, stopping playback');
+            setCurrentAudioChapter(null);
+            trackListeningTime(false);
+            // TODO: Could show toast notification to user
           }
         } else {
-          // Next chapter has no audio - stop playback
-          console.log(`[TTS Auto-Advance] Next chapter has no audio, stopping playback`);
+          // Last chapter or chapter not found - stop playback
+          console.log('[TTS Auto-Advance] Reached last chapter, stopping playback');
           setCurrentAudioChapter(null);
           trackListeningTime(false);
         }
-      } else {
-        // Last chapter or chapter not found - stop playback
-        console.log(`[TTS Auto-Advance] Reached last chapter, stopping playback`);
+      } catch (error) {
+        console.error('[TTS Auto-Advance] Error during auto-advance:', error);
         setCurrentAudioChapter(null);
         trackListeningTime(false);
+        // TODO: Could show error toast to user
       }
     },
   });
@@ -597,12 +632,15 @@ function ReaderViewContentComponent({ bookId, bookBlob, initialCfi }: ReaderView
               }}
               onPlayAudio={(chapter) => {
                 console.log('[ReaderView] Play audio clicked for chapter:', {
+                  id: chapter.id,
                   title: chapter.title,
                   cfiStart: chapter.cfiStart,
                   hasGoToLocation: !!goToLocation,
-                  hasBook: !!book
+                  hasBook: !!book,
+                  fullChapter: chapter
                 });
 
+                console.log('[DEBUG] Setting currentAudioChapter with ID:', chapter.id);
                 setCurrentAudioChapter(chapter);
 
                 // Navigate to the chapter when playing audio (same as onChapterSelect)
